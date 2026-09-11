@@ -36,39 +36,50 @@ def decode_qr_from_image(image_input: Union[str, Image.Image]) -> list[str]:
     """
     decoded_urls = []
 
+    # Convert input to PIL Image if file-like or path
+    pil_img = None
+    if isinstance(image_input, Image.Image):
+        pil_img = image_input
+    elif hasattr(image_input, "read") or hasattr(image_input, "getvalue"):
+        try:
+            pil_img = Image.open(image_input)
+        except Exception:
+            pass
+    elif isinstance(image_input, str) and os.path.exists(image_input):
+        try:
+            pil_img = Image.open(image_input)
+        except Exception:
+            pass
+
     # 1. Try pyzbar
-    try:
-        from pyzbar.pyzbar import decode
-        if isinstance(image_input, str):
-            with Image.open(image_input) as img:
-                results = decode(img)
-        else:
-            results = decode(image_input)
-        for r in results:
-            text = r.data.decode("utf-8", errors="ignore")
-            if text:
-                decoded_urls.append(text)
-        return decoded_urls
-    except (ImportError, Exception):
-        pass
+    if pil_img is not None:
+        try:
+            from pyzbar.pyzbar import decode
+            results = decode(pil_img)
+            for r in results:
+                text = r.data.decode("utf-8", errors="ignore")
+                if text:
+                    decoded_urls.append(text)
+            if decoded_urls:
+                return decoded_urls
+        except BaseException:
+            pass
 
     # 2. Try OpenCV QRCodeDetector fallback
-    try:
-        import cv2
-        import numpy as np
-        if isinstance(image_input, str):
-            cv_img = cv2.imread(image_input)
-        else:
-            cv_img = cv2.cvtColor(np.array(image_input), cv2.COLOR_RGB2BGR)
-
-        if cv_img is not None:
-            detector = cv2.QRCodeDetector()
-            val, pts, _ = detector.detectAndDecode(cv_img)
-            if val:
-                decoded_urls.append(val)
-        return decoded_urls
-    except (ImportError, Exception):
-        pass
+    if pil_img is not None:
+        try:
+            import cv2
+            import numpy as np
+            cv_img = cv2.cvtColor(np.array(pil_img.convert("RGB")), cv2.COLOR_RGB2BGR)
+            if cv_img is not None:
+                detector = cv2.QRCodeDetector()
+                val, pts, _ = detector.detectAndDecode(cv_img)
+                if val:
+                    decoded_urls.append(val)
+            if decoded_urls:
+                return decoded_urls
+        except BaseException:
+            pass
 
     # 3. If libraries unavailable or no QR found, check for embedded URL strings in binary metadata if path provided
     if isinstance(image_input, str) and os.path.exists(image_input):
