@@ -1,229 +1,272 @@
 """
-Synthetic Log & Attack Simulation Engine
-Generates realistic cybersecurity telemetry for the XDR system.
+Argus — Synthetic Enterprise Communications & Phishing Telemetry Generator
+Generates realistic corporate email and message streams with hidden ground-truth
+labels to evaluate multi-layer phishing detection accuracy, false positive rates,
+and explainability.
 """
 
 import random
-import string
 import datetime
 import pandas as pd
-import numpy as np
+from typing import List, Dict, Tuple, Any
 
+# Standard corporate departments & accounts
+DEPARTMENTS = ["Finance", "Engineering", "HR", "Sales", "Legal", "Executive", "Operations"]
 
-NORMAL_EMAILS = [
-    "Hi team, please find the quarterly report attached. Let me know if you have questions.",
-    "Reminder: Staff meeting tomorrow at 10 AM in conference room B.",
-    "The new parking policy takes effect next Monday. See attached memo.",
-    "Could you review the budget proposal and send feedback by Friday?",
-    "IT maintenance window scheduled for Saturday 2-6 AM. Expect brief outages.",
-    "Happy birthday! The team got you a cake in the break room.",
-    "Please submit your timesheets by end of day Thursday.",
-    "Congratulations on the successful project launch last week!",
-    "Attached is the updated employee handbook for your review.",
-    "The water fountain on floor 3 is fixed. Thanks for your patience.",
-    "Weekly sync notes from today's standup are in the shared drive.",
-    "Reminder to complete your annual cybersecurity awareness training.",
-    "New printer installed on floor 2. Driver instructions attached.",
-    "Team lunch this Friday at noon. RSVP by Wednesday.",
-    "Please update your emergency contact information in the HR portal.",
+INTERNAL_DOMAIN = "acme-corp.internal"
+
+NORMAL_USERS = [
+    ("sarah.jenkins@acme-corp.internal", "HR", 9, 17),
+    ("david.chen@acme-corp.internal", "Engineering", 10, 19),
+    ("elena.rostova@acme-corp.internal", "Finance", 8, 17),
+    ("marcus.vance@acme-corp.internal", "Executive", 8, 18),
+    ("rachel.adams@acme-corp.internal", "Legal", 9, 18),
+    ("kevin.wright@acme-corp.internal", "Sales", 8, 20),
+    ("priya.patel@acme-corp.internal", "Operations", 9, 17),
 ]
 
-PHISHING_EMAILS = [
-    "URGENT: Your account has been compromised! Click here immediately to verify your identity: http://secure-login.xyz/verify",
-    "You have won a $1000 gift card! Claim now before it expires: http://free-rewards.biz/claim",
-    "Your password expires in 24 hours. Reset it NOW at http://password-update.tk/reset to avoid lockout.",
-    "ALERT: Unauthorized login detected on your account. Confirm your credentials here: http://account-secure.cc/login",
-    "Invoice #38291 attached. Payment overdue - wire transfer required immediately to avoid penalties.",
-    "Dear employee, IT requires you to re-enter your credentials at http://internal-portal.ml/auth for system upgrade.",
-    "ACTION REQUIRED: Your direct deposit information needs verification. Update at http://hr-payroll.ga/update",
-    "Your package could not be delivered. Track and reschedule at http://delivery-update.tk/track",
-    "CEO has approved your expense claim. Download receipt from http://finance-docs.xyz/download",
-    "Security Notice: Multiple failed login attempts. Verify your account or it will be suspended: http://verify-now.cc",
-    "Congratulations! You've been selected for a salary bonus. Fill form at http://bonus-claim.ml/form",
-    "IMMEDIATE ACTION: Tax refund of $3,247 pending. Submit details at http://irs-refund.biz/submit",
-    "Your cloud storage is 98% full. Upgrade free at http://cloud-upgrade.tk/free",
-    "Board meeting documents attached. Password: company123. Open immediately.",
-    "HR Update: New remote work policy requires VPN re-registration at http://vpn-setup.ga/register",
+# Normal corporate email templates
+BENIGN_TEMPLATES = [
+    {
+        "subject": "Quarterly Planning Sync - Agenda & Notes",
+        "text": "Hi team, please review the attached slides before tomorrow's Q3 planning session at 10 AM. Let me know if any items should be added to the backlog.",
+        "url": "https://wiki.acme-corp.internal/planning/q3",
+        "attachment": "q3_planning_deck.pdf",
+    },
+    {
+        "subject": "Updated Expense Policy Guidelines",
+        "text": "Please note that all travel and meal receipts for client meetings must now be submitted through the internal expensing portal by the last business day of the month.",
+        "url": "https://portal.acme-corp.internal/expenses",
+        "attachment": "",
+    },
+    {
+        "subject": "Code Review: PR #1042 - Auth Token Refresh",
+        "text": "Hey David, when you have a moment, could you take a look at the pull request for the session timeout handler? We want to merge before the staging freeze.",
+        "url": "https://github.com/acme-org/backend-service/pull/1042",
+        "attachment": "",
+    },
+    {
+        "subject": "Welcome our new Data Science hire!",
+        "text": "Everyone please join me in welcoming Liam to the analytics team starting Monday. We will do a team coffee walk at 2 PM.",
+        "url": "",
+        "attachment": "",
+    },
+    {
+        "subject": "Office Facilities Maintenance Window",
+        "text": "HVAC filter replacement is scheduled for Saturday 8 AM to 12 PM on floors 4 and 5. Noise will be minimal but access may be restricted.",
+        "url": "https://intranet.acme-corp.internal/facilities",
+        "attachment": "maintenance_schedule.pdf",
+    },
+    {
+        "subject": "Vendor Contract Draft for Review",
+        "text": "Attached is the redlined version of the Cloudflare SLA renewal contract. Please review Section 4 regarding data sovereignty before we sign.",
+        "url": "https://drive.acme-corp.internal/legal/cloudflare_sla.pdf",
+        "attachment": "cloudflare_sla_v2_clean.pdf",
+    },
+    {
+        "subject": "Weekly Standup Notes & Blockers",
+        "text": "Summary of today's sync: billing service deployment was successful. Marcus is following up with enterprise tier customer on SSO setup.",
+        "url": "https://slack.acme-corp.internal/archives/eng-sync",
+        "attachment": "",
+    }
 ]
 
-DEPARTMENTS = ["Finance", "IT", "Public Works", "Police", "Fire", "City Council", "Parks & Rec", "Water Utility", "HR", "Legal"]
-DEVICE_TYPES = ["workstation", "laptop", "mobile", "server", "iot_sensor"]
+# Phishing and attack scenarios
+ATTACK_SCENARIOS = [
+    {
+        "vector": "credential_harvesting_lookalike",
+        "subject": "URGENT: Microsoft 365 Password Expiration Notice",
+        "text": "FINAL NOTICE: Your enterprise Microsoft 365 password expires in 2 hours. Access to corporate mail and OneDrive will be terminated unless verified immediately.",
+        "url": "http://login.micros0ft-online-verify.com/auth/login",
+        "sender": "no-reply@micros0ft-online-verify.com",
+        "recipients": "sarah.jenkins@acme-corp.internal, all-staff@acme-corp.internal",
+        "attachment": "",
+        "is_phishing": True,
+    },
+    {
+        "vector": "brand_homoglyph_paypal",
+        "subject": "Account Suspension Warning: Suspicious Wire Transfer",
+        "text": "Security Alert: An unauthorized transaction of $4,850.00 was attempted from your corporate card. Verify your credentials immediately to halt payment.",
+        "url": "http://paypa1-security-update.xyz/login",
+        "sender": "fraud-prevention@paypa1-security-update.xyz",
+        "recipients": "elena.rostova@acme-corp.internal",
+        "attachment": "transaction_hold_notice.pdf",
+        "is_phishing": True,
+    },
+    {
+        "vector": "executive_wire_fraud",
+        "subject": "Strictly Confidential - Immediate Wire Settlement",
+        "text": "Elena, I am currently in an offsite executive board meeting with limited voice connectivity. We need an urgent wire transfer of $142,500 executed today for an unannounced acquisition. Do not discuss with team. Reply with confirmation.",
+        "url": "http://secure-wire-clearing.net/settlement/form",
+        "sender": "marcus.vance@acme-corp-executive.com",
+        "recipients": "elena.rostova@acme-corp.internal",
+        "attachment": "wire_instructions_confidential.pdf",
+        "is_phishing": True,
+    },
+    {
+        "vector": "compromised_internal_account",
+        "subject": "Urgent: Updated Employee Bonus Compensation Schedule",
+        "text": "Team, management has approved mid-year retention bonuses. Review your revised allocation and enter your direct deposit credentials on the compensation portal within 24 hours.",
+        "url": "http://portal-acme-payroll.biz/login",
+        "sender": "sarah.jenkins@acme-corp.internal",  # Real internal user compromised!
+        "recipients": "all-staff@acme-corp.internal, offshore-dev@partner-vendor.com",
+        "attachment": "bonus_calc_macro.xlsm",
+        "is_phishing": True,
+        "anomalous_hour": 3,  # 3 AM off-hours anomaly
+    },
+    {
+        "vector": "malicious_attachment_executable",
+        "subject": "Overdue Invoice #INV-88392 Payment Required",
+        "text": "Please find attached the signed purchase order and overdue remittance voucher. Execute payment immediately to prevent vendor service disconnection.",
+        "url": "http://vendor-invoice-storage.cloud/download",
+        "sender": "billing@cloud-billing-solutions.info",
+        "recipients": "elena.rostova@acme-corp.internal, david.chen@acme-corp.internal",
+        "attachment": "invoice_88392_remittance.scr",
+        "is_phishing": True,
+    },
+    {
+        "vector": "qr_code_quishing",
+        "subject": "Mandatory Duo Two-Factor Authentication Reset",
+        "text": "IT Security policy update: Our Multi-Factor Authentication token has been revoked. Scan the attached QR code with your mobile camera to re-enroll your authenticator app immediately.",
+        "url": "http://authenticator-sync-mfa.tk/qr-verify",
+        "sender": "it-support@authenticator-sync-mfa.tk",
+        "recipients": "david.chen@acme-corp.internal, rachel.adams@acme-corp.internal",
+        "attachment": "mfa_enrollment_qr.png",
+        "is_phishing": True,
+    },
+    {
+        "vector": "it_admin_impersonation",
+        "subject": "URGENT ACTION: VPN Security Certificate Expired",
+        "text": "IT Helpdesk alert: Your remote work VPN certificate expired at 00:00 UTC. To maintain access to internal corporate databases, click below and authenticate with your network credentials.",
+        "url": "http://vpn-acme-portal.tk/sso/login",
+        "sender": "helpdesk@acme-internal-support.xyz",
+        "recipients": "david.chen@acme-corp.internal, priya.patel@acme-corp.internal",
+        "attachment": "vpn_fix_patch.iso",
+        "is_phishing": True,
+    },
+]
 
 
-def _random_ip():
-    return f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}"
-
-
-def _random_user_id(dept=None):
-    dept = dept or random.choice(DEPARTMENTS)
-    prefix = dept[:3].lower()
-    num = random.randint(100, 999)
-    return f"{prefix}_{num}", dept
-
-
-def _random_device_id():
-    dtype = random.choice(DEVICE_TYPES)
-    return f"{dtype}-{random.randint(1000,9999)}", dtype
-
-
-def generate_normal_activity(n=50):
-    """Generate normal baseline telemetry logs."""
+def generate_enterprise_stream(n: int = 60, attack_ratio: float = 0.35) -> pd.DataFrame:
+    """
+    Generate a realistic stream of enterprise communications with hidden ground-truth labels.
+    
+    Parameters:
+    - n: Total number of messages to generate.
+    - attack_ratio: Proportion of simulated phishing/attack messages.
+    
+    Returns:
+    - pd.DataFrame containing communications telemetry and a strictly separated
+      `_ground_truth` dictionary column for post-verdict empirical validation.
+    """
     records = []
     now = datetime.datetime.now()
-    for i in range(n):
-        user_id, dept = _random_user_id()
-        device_id, device_type = _random_device_id()
-        login_hour = random.choice(list(range(7, 19)))  # business hours
+    
+    n_attacks = int(n * attack_ratio)
+    n_benign = n - n_attacks
+    
+    # Generate Benign Records
+    for i in range(n_benign):
+        sender_email, dept, start_h, end_h = random.choice(NORMAL_USERS)
+        template = random.choice(BENIGN_TEMPLATES)
+        
+        # Senders normally operate during their business hours
+        send_hour = random.randint(start_h, end_h)
+        delta_minutes = random.randint(5, 720)
+        timestamp = (now - datetime.timedelta(minutes=delta_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+        
+        recip_pool = [u[0] for u in NORMAL_USERS if u[0] != sender_email]
+        recipients = ", ".join(random.sample(recip_pool, k=random.randint(1, 2)))
+        
         records.append({
-            "timestamp": (now - datetime.timedelta(minutes=random.randint(0, 1440))).isoformat(),
-            "user_id": user_id,
-            "sender_id": user_id,
+            "id": f"MSG-{1000 + i}",
+            "timestamp": timestamp,
+            "sender_id": sender_email,
             "department": dept,
-            "login_hour": login_hour,
-            "send_hour": login_hour,
-            "failed_attempts": random.choices([0, 0, 0, 1], weights=[70, 10, 10, 10])[0],
-            "ip_address": _random_ip(),
-            "ip_risk_score": round(random.uniform(0, 25), 1),
-            "email_text": random.choice(NORMAL_EMAILS),
-            "recipients": f"{dept.lower()}_lead@cityhall.gov, team@cityhall.gov",
-            "url": "https://cityhall.gov/portal",
-            "has_attachment": bool(random.random() < 0.2),
-            "attachment_name": "quarterly_budget.pdf" if random.random() < 0.2 else "",
-            "device_id": device_id,
-            "device_type": device_type,
-            "bytes_transferred": random.randint(100, 50000),
-            "event_type": "normal",
+            "send_hour": send_hour,
+            "subject": template["subject"],
+            "email_text": template["text"],
+            "url": template["url"],
+            "has_attachment": bool(template["attachment"]),
+            "attachment_name": template["attachment"],
+            "recipients": recipients,
+            "_ground_truth": {
+                "is_phishing": False,
+                "vector": "benign_corporate",
+            }
         })
+        
+    # Generate Phishing / Attack Records
+    for j in range(n_attacks):
+        scenario = random.choice(ATTACK_SCENARIOS)
+        delta_minutes = random.randint(2, 360)
+        timestamp = (now - datetime.timedelta(minutes=delta_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+        
+        if scenario.get("vector") == "compromised_internal_account":
+            send_hour = scenario.get("anomalous_hour", 3)
+            sender_id = scenario["sender"]
+            dept = "HR"
+        else:
+            send_hour = random.randint(0, 23)
+            sender_id = scenario["sender"]
+            dept = "External"
+            
+        records.append({
+            "id": f"MSG-{2000 + j}",
+            "timestamp": timestamp,
+            "sender_id": sender_id,
+            "department": dept,
+            "send_hour": send_hour,
+            "subject": scenario["subject"],
+            "email_text": scenario["text"],
+            "url": scenario["url"],
+            "has_attachment": bool(scenario["attachment"]),
+            "attachment_name": scenario["attachment"],
+            "recipients": scenario["recipients"],
+            "_ground_truth": {
+                "is_phishing": scenario["is_phishing"],
+                "vector": scenario["vector"],
+            }
+        })
+        
+    random.shuffle(records)
     return pd.DataFrame(records)
 
 
-def simulate_phishing_attack(n=10):
-    """Simulate a phishing campaign targeting municipal employees."""
-    records = []
-    now = datetime.datetime.now()
-    suspicious_urls = [
-        "http://paypa1-security-update.xyz/login",
-        "http://secure-login.xyz/verify",
-        "http://account-secure.cc/login",
-        "http://irs-refund.biz/submit",
-        "http://password-update.tk/reset",
-    ]
-    risky_attachments = [
-        "invoice_38291.scr",
-        "payroll_update.exe",
-        "urgent_action.vbs",
-        "notice.js",
-        "",
-    ]
-    for i in range(n):
-        user_id, dept = _random_user_id()
-        device_id, device_type = _random_device_id()
-        login_hour = random.randint(0, 23)
-        records.append({
-            "timestamp": now.isoformat(),
-            "user_id": user_id,
-            "sender_id": f"external_spoofer_{random.randint(10,99)}@paypa1-update.xyz",
-            "department": dept,
-            "login_hour": login_hour,
-            "send_hour": login_hour,
-            "failed_attempts": random.randint(0, 2),
-            "ip_address": _random_ip(),
-            "ip_risk_score": round(random.uniform(30, 80), 1),
-            "email_text": random.choice(PHISHING_EMAILS),
-            "recipients": f"{user_id}@cityhall.gov, all_staff@cityhall.gov",
-            "url": random.choice(suspicious_urls),
-            "has_attachment": True,
-            "attachment_name": random.choice(risky_attachments),
-            "device_id": device_id,
-            "device_type": device_type,
-            "bytes_transferred": random.randint(500, 20000),
-            "event_type": "phishing",
-        })
-    return pd.DataFrame(records)
-
-
-def simulate_credential_breach(n=8):
-    """Simulate brute-force credential stuffing attack."""
-    records = []
-    now = datetime.datetime.now()
-    target_user, dept = _random_user_id()
-    for i in range(n):
-        device_id, device_type = _random_device_id()
-        login_hour = random.choice([0, 1, 2, 3, 4, 22, 23])  # off-hours
-        records.append({
-            "timestamp": (now - datetime.timedelta(seconds=random.randint(0, 300))).isoformat(),
-            "user_id": target_user,
-            "sender_id": target_user,
-            "department": dept,
-            "login_hour": login_hour,
-            "send_hour": login_hour,
-            "failed_attempts": random.randint(5, 20),
-            "ip_address": _random_ip(),
-            "ip_risk_score": round(random.uniform(60, 100), 1),
-            "email_text": random.choice(NORMAL_EMAILS),
-            "recipients": f"admin@cityhall.gov",
-            "url": "https://cityhall.gov/auth",
-            "has_attachment": False,
-            "attachment_name": "",
-            "device_id": device_id,
-            "device_type": device_type,
-            "bytes_transferred": random.randint(50, 500),
-            "event_type": "credential_breach",
-        })
-    return pd.DataFrame(records)
-
-
-def simulate_insider_threat(n=6):
-    """Simulate insider data exfiltration behavior."""
-    records = []
-    now = datetime.datetime.now()
-    user_id, dept = _random_user_id()
-    device_id, device_type = _random_device_id()
-    for i in range(n):
-        login_hour = random.choice([0, 1, 2, 3, 22, 23])
-        records.append({
-            "timestamp": (now - datetime.timedelta(minutes=random.randint(0, 120))).isoformat(),
-            "user_id": user_id,
-            "sender_id": user_id,
-            "department": dept,
-            "login_hour": login_hour,
-            "send_hour": login_hour,
-            "failed_attempts": random.randint(0, 2),
-            "ip_address": _random_ip(),
-            "ip_risk_score": round(random.uniform(20, 60), 1),
-            "email_text": "URGENT: Confidential archive extraction. Exfiltrating sensitive municipal records offsite immediately.",
-            "recipients": "anon_drop@darknet.xyz, external_audit@foreign.ru",
-            "url": "http://exfil-data-drop.xyz/upload",
-            "has_attachment": True,
-            "attachment_name": "confidential_exfil.iso",
-            "device_id": device_id,
-            "device_type": device_type,
-            "bytes_transferred": random.randint(500000, 5000000),  # large transfers
-            "event_type": "insider_threat",
-        })
-    return pd.DataFrame(records)
-
-
-def get_training_emails():
-    """Return labeled email data for phishing model training."""
-    emails = []
+def get_training_emails() -> Tuple[List[str], List[int]]:
+    """
+    Return corporate training dataset of text and binary labels for model re-training.
+    """
+    texts = []
     labels = []
-    for e in NORMAL_EMAILS:
-        emails.append(e)
+    
+    for t in BENIGN_TEMPLATES:
+        texts.append(f"{t['subject']}. {t['text']}")
         labels.append(0)
-    for e in PHISHING_EMAILS:
-        emails.append(e)
+        
+    for a in ATTACK_SCENARIOS:
+        texts.append(f"{a['subject']}. {a['text']}")
         labels.append(1)
-    # augment with variations
+        
+    # Data augmentation for robust baseline
+    augmented_texts = list(texts)
+    augmented_labels = list(labels)
     for _ in range(3):
-        for e in NORMAL_EMAILS:
-            words = e.split()
-            random.shuffle(words)
-            emails.append(" ".join(words))
-            labels.append(0)
-        for e in PHISHING_EMAILS:
-            words = e.split()
-            random.shuffle(words)
-            emails.append(" ".join(words))
-            labels.append(1)
-    return emails, labels
+        for text, label in zip(texts, labels):
+            words = text.split()
+            if len(words) > 6:
+                sample_words = words[:]
+                idx1, idx2 = random.sample(range(len(sample_words)), 2)
+                sample_words[idx1], sample_words[idx2] = sample_words[idx2], sample_words[idx1]
+                augmented_texts.append(" ".join(sample_words))
+                augmented_labels.append(label)
+                
+    return augmented_texts, augmented_labels
+
+
+if __name__ == "__main__":
+    df = generate_enterprise_stream(n=10)
+    print(f"Generated {len(df)} enterprise messages.")
+    print("Sample record:")
+    print(df.iloc[0].to_dict())
+

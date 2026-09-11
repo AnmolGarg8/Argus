@@ -88,7 +88,7 @@ class SenderBehaviorProfile:
             recipients = [r.strip() for r in recipients.split(",") if r.strip()]
 
         total_recip = max(len(recipients), 1)
-        ext_recip = sum(1 for r in recipients if not r.endswith((".gov", ".internal", "civic.org")))
+        ext_recip = sum(1 for r in recipients if not r.endswith((".corp", ".internal", "company.com", "enterprise.org", ".org")))
         ext_ratio = ext_recip / total_recip
 
         has_att = 1.0 if msg.get("has_attachment", False) else 0.0
@@ -179,9 +179,9 @@ class SenderBehaviorProfile:
             recipients = [r.strip() for r in recipients.split(",") if r.strip()]
         new_recipients = [
             r for r in recipients
-            if r not in self.typical_recipients and not any(r.endswith(d) for d in [".gov", "cityhall.gov", ".internal"])
+            if r not in self.typical_recipients and not any(r.endswith(d) for d in [".corp", ".internal", "company.com", "enterprise.org", ".org"])
         ]
-        if len(new_recipients) >= 1 and len(recipients) > 0:
+        if len(new_recipients) >= 1 and any(not r.endswith(("company.com", ".internal", ".corp")) for r in new_recipients):
             signals.append("ANOMALOUS_RECIPIENT_CLUSTER")
             deviations["recipient_anomaly"] = f"Contains {len(new_recipients)} unfamiliar external recipient(s)."
 
@@ -237,10 +237,10 @@ def generate_sender_synthetic_history(sender_id: str, n: int = 12) -> list[dict]
         "Review requested on the operational budget spreadsheet before Thursday.",
         "Thanks for the update. Let's schedule a brief sync call tomorrow morning.",
         "Reminder: Departmental timesheet approval window closes at 5 PM today.",
-        "The project timeline has been updated on the municipal intranet portal.",
+        "The project timeline has been updated on the corporate intranet portal.",
         "Hi team, please find the quarterly report attached. Let me know if you have questions.",
         "Reminder: Staff meeting tomorrow at 10 AM in conference room B.",
-        "The new parking policy takes effect next Monday. See attached memo.",
+        "The new workplace policy takes effect next Monday. See attached memo.",
         "Could you review the budget proposal and send feedback by Friday?",
         "Attached is the updated employee handbook for your review.",
         "Weekly sync notes from today's standup are in the shared drive.",
@@ -251,11 +251,11 @@ def generate_sender_synthetic_history(sender_id: str, n: int = 12) -> list[dict]
             "sender_id": sender_id,
             "send_hour": int(np.random.choice(range(8, 18))),  # Standard 8 AM - 6 PM
             "recipients": [
-                f"{dept_prefix}_lead@cityhall.gov",
-                "team@cityhall.gov",
-                f"{dept_prefix}_team@cityhall.gov",
-                "all_staff@cityhall.gov",
-                "admin@cityhall.gov",
+                f"{dept_prefix}_lead@company.com",
+                "team@company.com",
+                f"{dept_prefix}_team@company.com",
+                "all_staff@company.com",
+                "admin@company.com",
             ],
             "has_attachment": bool(i % 5 == 0),
             "email_text": standard_templates[i % len(standard_templates)],

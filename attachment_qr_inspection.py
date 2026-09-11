@@ -9,7 +9,7 @@ import os
 import re
 from typing import Union
 from PIL import Image
-from infrastructure_analysis import analyze_infrastructure
+from domain_analyzer import analyze_domain
 
 # Risky extensions frequently used in malware/droppers
 SUSPICIOUS_EXTENSIONS = {
@@ -135,8 +135,8 @@ def analyze_attachment(
             signals.append("EMBEDDED_QR_CODE_DETECTED")
             confidence = max(confidence, 70.0)
 
-            # Analyze extracted destination using infrastructure analysis
-            infra_result = analyze_infrastructure(extracted_url)
+            # Analyze extracted destination using domain analysis
+            infra_result = analyze_domain(extracted_url)
             qr_details = {
                 "decoded_data": extracted_url,
                 "infrastructure_eval": infra_result,
