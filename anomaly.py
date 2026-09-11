@@ -60,3 +60,10 @@ class AnomalyDetector:
         result["anomaly_score"] = np.round(anomaly_score, 1)
         result["anomaly_flag"] = (predictions == -1).astype(int)
         return result
+
+
+# Re-export SenderBehavior modeling for unified anomaly interface
+try:
+    from sender_behavior import analyze_sender_behavior, SenderBehaviorProfile, get_or_create_sender_profile
+except ImportError:
+    pass

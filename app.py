@@ -18,9 +18,20 @@ from simulator import (
 )
 from anomaly import AnomalyDetector
 from phishing import PhishingDetector
-from risk_engine import compute_risk_scores
+from risk_engine import (
+    compute_risk_scores,
+    evaluate_multilayer_threat,
+    log_analyst_feedback,
+    get_live_accuracy_metrics,
+    get_feedback_records,
+)
 from incident_response import process_incidents
 from globe_map import render_3d_globe
+from infrastructure_analysis import analyze_infrastructure, detect_lookalike_domain, check_domain_age, trace_redirect_chain
+from page_similarity import analyze_page_similarity
+from sender_behavior import analyze_sender_behavior
+from attachment_qr_inspection import analyze_attachment
+from PIL import Image
 
 # ── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -444,18 +455,238 @@ st.markdown("""
 if st.session_state.incidents:
     for i, inc in enumerate(reversed(st.session_state.incidents[-10:])):
         severity_emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(inc["risk_level"], "⚪")
+        inc_id = inc.get("incident_id", f"INC-{i+1000}")
         with st.expander(
-            f"{severity_emoji} {inc['risk_level']} — {inc['user_id']} — {inc['event_type']} (Risk: {inc['risk_score']:.0f})"
+            f"{severity_emoji} {inc['risk_level']} — {inc['user_id']} — {inc['event_type']} (Risk: {inc['risk_score']:.0f}) [{inc_id}]"
         ):
             st.code(inc["summary"], language=None)
+            
+            # Analyst Review & Feedback Action Row
+            st.markdown("<div style='font-size:0.75rem; color:#94A3B8; font-weight:700; margin-top:8px;'>SOC ANALYST VERDICT & FEEDBACK LOOP</div>", unsafe_allow_html=True)
+            fb_c1, fb_c2, fb_c3 = st.columns([1.5, 1.5, 3])
+            with fb_c1:
+                if st.button(f"✅ Confirm Threat", key=f"conf_{inc_id}_{i}"):
+                    log_analyst_feedback(
+                        incident_id=inc_id,
+                        analyst_decision="CONFIRMED",
+                        layer_fired=inc.get("layers_fired", "Telemetry"),
+                        original_risk_level=inc["risk_level"],
+                        analyst_verdict="MALICIOUS",
+                        analyst_notes=f"Confirmed malicious activity by SOC analyst for {inc['user_id']}",
+                    )
+                    st.success(f"{inc_id} confirmed as true threat.")
+                    st.rerun()
+            with fb_c2:
+                if st.button(f"⚠️ Override (False Pos)", key=f"over_{inc_id}_{i}"):
+                    log_analyst_feedback(
+                        incident_id=inc_id,
+                        analyst_decision="OVERRIDDEN",
+                        layer_fired=inc.get("layers_fired", "Telemetry"),
+                        original_risk_level=inc["risk_level"],
+                        analyst_verdict="FALSE_POSITIVE",
+                        analyst_notes=f"Overridden by SOC analyst - benign operational deviation",
+                    )
+                    st.warning(f"{inc_id} marked as false positive.")
+                    st.rerun()
+            with fb_c3:
+                st.caption(f"Fired Layer(s): **{inc.get('layers_fired', 'Telemetry')}**")
 else:
     st.info("No incident reports to display.")
+
+# ── Multi-Vector Threat Analysis Lab ─────────────────────────────────────────
+st.markdown("""
+<div class="section-header fade-in" style="animation-delay:1.1s; margin-top:3.5rem;">
+    🔬 Multi-Vector Threat Inspection Lab
+</div>
+<div style="font-size:0.7rem; color:var(--text-secondary); margin-bottom:1.5rem; letter-spacing:1px; text-transform:uppercase;">
+    Autonomous Inspection Engines // Independent Layer Evaluation // Highest-Confidence Resolution
+</div>
+""", unsafe_allow_html=True)
+
+tab_infra, tab_visual, tab_sender, tab_attach, tab_feedback = st.tabs([
+    "🌐 Infrastructure & Lookalike",
+    "🖼️ Visual Page Similarity",
+    "👤 Sender Behavior Baseline",
+    "📎 Attachment & QR Inspection",
+    "📊 SOC Analyst Feedback & Accuracy"
+])
+
+with tab_infra:
+    st.markdown("#### 🌐 Lookalike Domain, WHOIS Age & Redirect-Chain Inspector")
+    st.caption("Inspects homoglyph domain mutations against brand allowlists, queries registration age, and traces redirect chains for credential-form signatures.")
+    
+    infra_col1, infra_col2 = st.columns([3, 1])
+    with infra_col1:
+        test_url = st.text_input(
+            "Target URL or Domain to Analyze",
+            value="http://paypa1-security-update.xyz/login",
+            help="Enter a test URL or domain name (e.g. paypa1.com, login.microsoftonline.com, internal-portal.tk)"
+        )
+    with infra_col2:
+        max_age = st.number_input("Max Age Threshold (days)", min_value=1, max_value=365, value=30)
+
+    if st.button("🚀 Run Infrastructure Scan", use_container_width=True):
+        with st.spinner("Analyzing domain homoglyphs, querying WHOIS, and tracing redirect chain..."):
+            infra_res = analyze_infrastructure(test_url, max_domain_age_days=max_age)
+            
+            res_col1, res_col2 = st.columns([1, 2])
+            with res_col1:
+                st.metric("Detection Verdict", "FLAGGED THREAT" if infra_res["flagged"] else "BENIGN")
+                st.metric("Engine Confidence", f"{infra_res['confidence']:.1f}%")
+                if infra_res["signals"]:
+                    st.write("**Active Signals:**")
+                    for sig in infra_res["signals"]:
+                        st.markdown(f"- 🔴 `{sig}`")
+            with res_col2:
+                st.write("**Technical Explanation:**")
+                if infra_res["flagged"]:
+                    st.error(infra_res["explanation"])
+                else:
+                    st.success(infra_res["explanation"])
+                
+                with st.expander("Detailed Telemetry Breakdown"):
+                    st.json(infra_res["details"])
+
+with tab_visual:
+    st.markdown("#### 🖼️ Visual Perceptual Hashing (Page Similarity)")
+    st.caption("Compares screenshot perceptual hashes (pHash & dHash) against reference login templates to detect visual credential phishing.")
+    
+    vis_col1, vis_col2 = st.columns([1, 1])
+    with vis_col1:
+        preset_choice = st.selectbox(
+            "Select a Test Screenshot or Upload Custom",
+            options=[
+                "Microsoft 365 Reference Template",
+                "PayPal Reference Template",
+                "Civic Citizen Portal Reference Template",
+                "Upload Custom Image"
+            ]
+        )
+        threshold_val = st.slider("Visual Impersonation Threshold (%)", min_value=50.0, max_value=95.0, value=75.0, step=1.0)
+        
+        test_image = None
+        if preset_choice == "Microsoft 365 Reference Template":
+            test_img_path = "templates/reference_logins/microsoft365.png"
+            if os.path.exists(test_img_path):
+                test_image = Image.open(test_img_path)
+        elif preset_choice == "PayPal Reference Template":
+            test_img_path = "templates/reference_logins/paypal.png"
+            if os.path.exists(test_img_path):
+                test_image = Image.open(test_img_path)
+        elif preset_choice == "Civic Citizen Portal Reference Template":
+            test_img_path = "templates/reference_logins/civic_portal.png"
+            if os.path.exists(test_img_path):
+                test_image = Image.open(test_img_path)
+        else:
+            uploaded_file = st.file_uploader("Upload Page Screenshot (.png, .jpg)", type=["png", "jpg", "jpeg"])
+            if uploaded_file:
+                test_image = Image.open(uploaded_file)
+
+    with vis_col2:
+        if test_image:
+            st.image(test_image, caption="Loaded Screenshot Input", width=260)
+            if st.button("🔍 Execute Perceptual Hash Analysis", use_container_width=True):
+                vis_res = analyze_page_similarity(test_image, threshold=threshold_val)
+                st.markdown("---")
+                if vis_res["flagged"]:
+                    st.error(f"⚠️ **Visual Impersonation Detected!** Closest brand: **{vis_res['matched_brand']}** ({vis_res['similarity_score']:.1f}% match)")
+                    st.caption(vis_res["explanation"])
+                else:
+                    st.success(f"✅ **Visual Layout Appears Distinct.** (Top similarity: {vis_res['similarity_score']:.1f}%)")
+                    st.caption(vis_res["explanation"])
+                
+                if vis_res.get("all_matches"):
+                    st.dataframe(pd.DataFrame(vis_res["all_matches"]), use_container_width=True)
+        else:
+            st.info("Select or upload an image to run perceptual hash verification.")
+
+with tab_sender:
+    st.markdown("#### 👤 Per-Account Sender-Behavior Modeling")
+    st.caption("Maintains isolated Isolation Forest baselines per sender, modeling typical sending hours, recipient domains, and writing-style fingerprints.")
+    
+    sb_col1, sb_col2 = st.columns([1, 1])
+    with sb_col1:
+        test_sender = st.text_input("Sender Account ID", value="fin_204")
+        test_hour = st.slider("Transmission Hour (24h)", min_value=0, max_value=23, value=2)
+        test_recips = st.text_input("Recipient Addresses (comma-separated)", value="external_audit@darknet.xyz, anon_drop@relay.to")
+        test_att = st.checkbox("Message Includes Attachment", value=True)
+        test_msg_text = st.text_area(
+            "Outbound Email Content",
+            value="URGENT! Transfer pending payroll authorization codes right now! Do not delay or accounts will freeze.",
+            height=100
+        )
+    
+    with sb_col2:
+        st.markdown("**Baseline Overview:**")
+        st.caption("Sender baselines learn typical business hours (8-18), municipal recipient sets (@cityhall.gov), and routine administrative tone.")
+        if st.button("📊 Evaluate Sender Baseline Deviation", use_container_width=True):
+            features = {
+                "send_hour": test_hour,
+                "recipients": test_recips,
+                "has_attachment": test_att,
+                "email_text": test_msg_text,
+            }
+            sb_res = analyze_sender_behavior(test_sender, features)
+            st.markdown("---")
+            if sb_res["flagged"]:
+                st.error(f"🚨 **Sender Anomaly Detected!** Confidence: {sb_res['confidence']:.1f}%")
+                st.write(sb_res["explanation"])
+                if sb_res["signals"]:
+                    for s in sb_res["signals"]:
+                        st.markdown(f"- 🔴 `{s}`")
+            else:
+                st.success(f"✅ **Normal Sender Behavior.** Activity conforms to {test_sender}'s historical baseline.")
+                st.caption(sb_res["explanation"])
+
+with tab_attach:
+    st.markdown("#### 📎 Risky Extension & QR Code Inspection")
+    st.caption("Screens file attachments for dangerous executable/dropper extensions and extracts QR codes to trace embedded destinations.")
+    
+    at_col1, at_col2 = st.columns([1, 1])
+    with at_col1:
+        test_filename = st.text_input("Simulated Attachment Filename", value="invoice_payment_report.scr")
+        st.caption("Try extensions like: `.exe`, `.scr`, `.bat`, `.js`, `.ps1`, `.pdf`")
+        uploaded_qr = st.file_uploader("Upload Image to inspect for QR Code (optional)", type=["png", "jpg", "jpeg"])
+    
+    with at_col2:
+        if st.button("🛡️ Scan Attachment Payload", use_container_width=True):
+            test_payload = uploaded_qr if uploaded_qr else None
+            att_res = analyze_attachment(test_filename, file_bytes_or_path=test_payload)
+            st.markdown("---")
+            if att_res["flagged"]:
+                st.error(f"⚠️ **Threat Found in Attachment!** Confidence: {att_res['confidence']:.1f}%")
+                st.write(att_res["explanation"])
+                for s in att_res["signals"]:
+                    st.markdown(f"- 🔴 `{s}`")
+            else:
+                st.success("✅ **Attachment Payload Cleared.** No dangerous extensions or malicious QR codes detected.")
+                st.caption(att_res["explanation"])
+
+with tab_feedback:
+    st.markdown("#### 📊 SOC Analyst Feedback Loop & Live Accuracy")
+    st.caption("Persistent SQLite tracking of SOC analyst Confirmations and False-Positive Overrides to evaluate detection precision.")
+    
+    metrics = get_live_accuracy_metrics()
+    fb_k1, fb_k2, fb_k3, fb_k4 = st.columns(4)
+    with fb_k1:
+        st.metric("Total Reviews", f"{metrics['total_reviews']}")
+    with fb_k2:
+        st.metric("Confirmed True Positive", f"{metrics['confirmed_count']}")
+    with fb_k3:
+        st.metric("Overridden False Positive", f"{metrics['overridden_count']}")
+    with fb_k4:
+        st.metric("Analyst Concordance", f"{metrics['accuracy_rate']:.1f}%")
+    
+    if metrics["records"]:
+        st.dataframe(pd.DataFrame(metrics["records"]), use_container_width=True)
+    else:
+        st.info("No feedback decisions logged yet. Use the 'Confirm Threat' or 'Override' buttons under Intelligence Briefings to log analyst decisions.")
 
 # ── Footer ───────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
     "<div style='text-align:center; color:#3a4a5a; font-size:0.8rem;'>"
-    "AI Adaptive XDR – AIRAVAT • Powered by Isolation Forest & TF-IDF/LR • "
+    "AI Adaptive XDR – AIRAVAT • Multi-Layer Threat Architecture & Analyst Feedback Loop • "
     f"Events Processed: {len(df)} • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     "</div>",
     unsafe_allow_html=True,
