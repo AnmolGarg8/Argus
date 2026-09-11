@@ -265,15 +265,23 @@ def trace_redirect_chain(url: str, max_hops: int = 10, timeout: int = 5) -> dict
 SUSPICIOUS_TLDS = {".xyz", ".tk", ".ml", ".ga", ".cf", ".gq", ".biz", ".cc", ".top", ".buzz", ".monster"}
 SUSPICIOUS_KEYWORDS = ["secure-login", "account-secure", "verify-now", "password-update", "free-rewards", "irs-refund", "vpn-setup", "auth-portal", "finance-docs", "internal-portal"]
 
+# In-memory session cache keyed by (domain, fast_scan, max_domain_age_days)
+_INFRA_CACHE: dict = {}
+
 
 def analyze_infrastructure(url: str, max_domain_age_days: int = 30, fast_scan: bool = False) -> dict:
     """
     Comprehensive infrastructure analysis.
     Combines:
       - Lookalike/homoglyph domain spoof check
-      - WHOIS domain age inspection (bypassed in fast_scan mode)
-      - Redirect-chain tracing & credential harvesting check (bypassed in fast_scan mode)
+      - WHOIS domain age inspection (skipped in fast_scan mode)
+      - Redirect-chain tracing & credential harvesting check (skipped in fast_scan mode)
       - Suspicious TLD & keyword heuristic analysis
+
+    When fast_scan=True:
+      - Skips WHOIS lookup and redirect-chain HTTP request entirely
+      - Only runs the local, network-free homoglyph/lookalike domain check
+      - Returns {flagged, signals, confidence, explanation, details}
 
     Returns:
       {
@@ -285,6 +293,45 @@ def analyze_infrastructure(url: str, max_domain_age_days: int = 30, fast_scan: b
       }
     """
     domain = extract_domain(url)
+    if not domain:
+        return {
+            "flagged": False,
+            "signals": [],
+            "confidence": 0.0,
+            "explanation": "No valid domain or URL provided.",
+            "details": {"domain": ""},
+        }
+
+    cache_key = (domain, fast_scan, max_domain_age_days)
+    if cache_key in _INFRA_CACHE:
+        return _INFRA_CACHE[cache_key]
+
+    # Fast scan branch: network-free, homoglyph/lookalike check only
+    if fast_scan:
+        lookalike_res = detect_lookalike_domain(domain)
+        is_flagged = lookalike_res["is_lookalike"]
+        signals = ["HOMOGLYPH_LOOKALIKE_DOMAIN"] if is_flagged else []
+        if is_flagged:
+            confidence = max(88.0, round(lookalike_res["similarity"] * 100, 1))
+            explanation = lookalike_res["explanation"]
+        else:
+            confidence = 10.0
+            explanation = f"Infrastructure fast scan for '{domain}' found no homoglyph or lookalike spoofing patterns."
+
+        result = {
+            "flagged": is_flagged,
+            "signals": signals,
+            "confidence": round(confidence, 1),
+            "explanation": explanation,
+            "details": {
+                "domain": domain,
+                "lookalike": lookalike_res,
+            },
+        }
+        _INFRA_CACHE[cache_key] = result
+        return result
+
+    # Full scan branch (fast_scan=False)
     signals = []
     confidence = 0.0
     explanation_points = []
@@ -296,7 +343,7 @@ def analyze_infrastructure(url: str, max_domain_age_days: int = 30, fast_scan: b
         confidence = max(confidence, 88.0)
         explanation_points.append(lookalike_res["explanation"])
 
-    # 2. Heuristic TLD & Keyword check (Always runs, fast)
+    # 2. Heuristic TLD & Keyword check
     has_suspicious_tld = any(domain.endswith(tld) for tld in SUSPICIOUS_TLDS)
     has_suspicious_kw = any(kw in domain or kw in url.lower() for kw in SUSPICIOUS_KEYWORDS)
 
@@ -310,39 +357,34 @@ def analyze_infrastructure(url: str, max_domain_age_days: int = 30, fast_scan: b
         confidence = max(confidence, 78.0)
         explanation_points.append(f"URL contains high-risk credential-phishing nomenclature.")
 
-    age_res = {"flagged": False, "age_days": None, "explanation": "Skipped in fast scan"}
-    redirect_res = {"flagged": False, "explanation": "Skipped in fast scan"}
+    # 3. WHOIS age check
+    age_res = check_domain_age(domain, max_age_days=max_domain_age_days)
+    if age_res["flagged"]:
+        signals.append("NEWLY_REGISTERED_DOMAIN")
+        confidence = max(confidence, 78.0)
+        explanation_points.append(age_res["explanation"])
 
-    if not fast_scan:
-        # 3. WHOIS age check
-        age_res = check_domain_age(domain, max_age_days=max_domain_age_days)
-        if age_res["flagged"]:
-            signals.append("NEWLY_REGISTERED_DOMAIN")
-            confidence = max(confidence, 78.0)
-            explanation_points.append(age_res["explanation"])
-
-        # 4. Redirect chain inspection
-        redirect_res = trace_redirect_chain(url, timeout=3)
-        if redirect_res["flagged"]:
-            if redirect_res.get("has_credential_form"):
-                signals.append("CREDENTIAL_HARVEST_LANDING_PAGE")
-                confidence = max(confidence, 85.0)
-            else:
-                signals.append("EXCESSIVE_REDIRECT_CHAIN")
-                confidence = max(confidence, 60.0)
-            explanation_points.append(redirect_res["explanation"])
+    # 4. Redirect chain inspection
+    redirect_res = trace_redirect_chain(url, timeout=3)
+    if redirect_res["flagged"]:
+        if redirect_res.get("has_credential_form"):
+            signals.append("CREDENTIAL_HARVEST_LANDING_PAGE")
+            confidence = max(confidence, 85.0)
+        else:
+            signals.append("EXCESSIVE_REDIRECT_CHAIN")
+            confidence = max(confidence, 60.0)
+        explanation_points.append(redirect_res["explanation"])
 
     flagged = len(signals) > 0
     if not flagged:
         confidence = 10.0
         overall_explanation = f"Infrastructure analysis for '{domain}' found no suspicious homoglyphs, mature registration, and clean landing behavior."
     else:
-        # If multiple signals fire simultaneously, boost confidence
         if len(signals) >= 2:
             confidence = min(98.0, confidence + 10.0)
         overall_explanation = " | ".join(explanation_points)
 
-    return {
+    result = {
         "flagged": flagged,
         "signals": signals,
         "confidence": round(confidence, 1),
@@ -354,3 +396,5 @@ def analyze_infrastructure(url: str, max_domain_age_days: int = 30, fast_scan: b
             "redirects": redirect_res,
         },
     }
+    _INFRA_CACHE[cache_key] = result
+    return result
