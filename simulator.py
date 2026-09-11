@@ -77,12 +77,18 @@ def generate_normal_activity(n=50):
         records.append({
             "timestamp": (now - datetime.timedelta(minutes=random.randint(0, 1440))).isoformat(),
             "user_id": user_id,
+            "sender_id": user_id,
             "department": dept,
             "login_hour": login_hour,
+            "send_hour": login_hour,
             "failed_attempts": random.choices([0, 0, 0, 1], weights=[70, 10, 10, 10])[0],
             "ip_address": _random_ip(),
             "ip_risk_score": round(random.uniform(0, 25), 1),
             "email_text": random.choice(NORMAL_EMAILS),
+            "recipients": f"{dept.lower()}_lead@cityhall.gov, team@cityhall.gov",
+            "url": "https://cityhall.gov/portal",
+            "has_attachment": bool(random.random() < 0.2),
+            "attachment_name": "quarterly_budget.pdf" if random.random() < 0.2 else "",
             "device_id": device_id,
             "device_type": device_type,
             "bytes_transferred": random.randint(100, 50000),
@@ -95,6 +101,20 @@ def simulate_phishing_attack(n=10):
     """Simulate a phishing campaign targeting municipal employees."""
     records = []
     now = datetime.datetime.now()
+    suspicious_urls = [
+        "http://paypa1-security-update.xyz/login",
+        "http://secure-login.xyz/verify",
+        "http://account-secure.cc/login",
+        "http://irs-refund.biz/submit",
+        "http://password-update.tk/reset",
+    ]
+    risky_attachments = [
+        "invoice_38291.scr",
+        "payroll_update.exe",
+        "urgent_action.vbs",
+        "notice.js",
+        "",
+    ]
     for i in range(n):
         user_id, dept = _random_user_id()
         device_id, device_type = _random_device_id()
@@ -102,12 +122,18 @@ def simulate_phishing_attack(n=10):
         records.append({
             "timestamp": now.isoformat(),
             "user_id": user_id,
+            "sender_id": f"external_spoofer_{random.randint(10,99)}@paypa1-update.xyz",
             "department": dept,
             "login_hour": login_hour,
+            "send_hour": login_hour,
             "failed_attempts": random.randint(0, 2),
             "ip_address": _random_ip(),
             "ip_risk_score": round(random.uniform(30, 80), 1),
             "email_text": random.choice(PHISHING_EMAILS),
+            "recipients": f"{user_id}@cityhall.gov, all_staff@cityhall.gov",
+            "url": random.choice(suspicious_urls),
+            "has_attachment": True,
+            "attachment_name": random.choice(risky_attachments),
             "device_id": device_id,
             "device_type": device_type,
             "bytes_transferred": random.randint(500, 20000),
@@ -127,12 +153,18 @@ def simulate_credential_breach(n=8):
         records.append({
             "timestamp": (now - datetime.timedelta(seconds=random.randint(0, 300))).isoformat(),
             "user_id": target_user,
+            "sender_id": target_user,
             "department": dept,
             "login_hour": login_hour,
+            "send_hour": login_hour,
             "failed_attempts": random.randint(5, 20),
             "ip_address": _random_ip(),
             "ip_risk_score": round(random.uniform(60, 100), 1),
             "email_text": random.choice(NORMAL_EMAILS),
+            "recipients": f"admin@cityhall.gov",
+            "url": "https://cityhall.gov/auth",
+            "has_attachment": False,
+            "attachment_name": "",
             "device_id": device_id,
             "device_type": device_type,
             "bytes_transferred": random.randint(50, 500),
@@ -152,12 +184,18 @@ def simulate_insider_threat(n=6):
         records.append({
             "timestamp": (now - datetime.timedelta(minutes=random.randint(0, 120))).isoformat(),
             "user_id": user_id,
+            "sender_id": user_id,
             "department": dept,
             "login_hour": login_hour,
+            "send_hour": login_hour,
             "failed_attempts": random.randint(0, 2),
             "ip_address": _random_ip(),
             "ip_risk_score": round(random.uniform(20, 60), 1),
-            "email_text": random.choice(NORMAL_EMAILS),
+            "email_text": "URGENT: Confidential archive extraction. Exfiltrating sensitive municipal records offsite immediately.",
+            "recipients": "anon_drop@darknet.xyz, external_audit@foreign.ru",
+            "url": "http://exfil-data-drop.xyz/upload",
+            "has_attachment": True,
+            "attachment_name": "confidential_exfil.iso",
             "device_id": device_id,
             "device_type": device_type,
             "bytes_transferred": random.randint(500000, 5000000),  # large transfers

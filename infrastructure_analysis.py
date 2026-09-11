@@ -262,13 +262,18 @@ def trace_redirect_chain(url: str, max_hops: int = 10, timeout: int = 5) -> dict
     }
 
 
-def analyze_infrastructure(url: str, max_domain_age_days: int = 30) -> dict:
+SUSPICIOUS_TLDS = {".xyz", ".tk", ".ml", ".ga", ".cf", ".gq", ".biz", ".cc", ".top", ".buzz", ".monster"}
+SUSPICIOUS_KEYWORDS = ["secure-login", "account-secure", "verify-now", "password-update", "free-rewards", "irs-refund", "vpn-setup", "auth-portal", "finance-docs", "internal-portal"]
+
+
+def analyze_infrastructure(url: str, max_domain_age_days: int = 30, fast_scan: bool = False) -> dict:
     """
     Comprehensive infrastructure analysis.
     Combines:
       - Lookalike/homoglyph domain spoof check
-      - WHOIS domain age inspection
-      - Redirect-chain tracing & credential harvesting check
+      - WHOIS domain age inspection (bypassed in fast_scan mode)
+      - Redirect-chain tracing & credential harvesting check (bypassed in fast_scan mode)
+      - Suspicious TLD & keyword heuristic analysis
 
     Returns:
       {
@@ -291,23 +296,41 @@ def analyze_infrastructure(url: str, max_domain_age_days: int = 30) -> dict:
         confidence = max(confidence, 88.0)
         explanation_points.append(lookalike_res["explanation"])
 
-    # 2. WHOIS age check
-    age_res = check_domain_age(domain, max_age_days=max_domain_age_days)
-    if age_res["flagged"]:
-        signals.append("NEWLY_REGISTERED_DOMAIN")
-        confidence = max(confidence, 78.0)
-        explanation_points.append(age_res["explanation"])
+    # 2. Heuristic TLD & Keyword check (Always runs, fast)
+    has_suspicious_tld = any(domain.endswith(tld) for tld in SUSPICIOUS_TLDS)
+    has_suspicious_kw = any(kw in domain or kw in url.lower() for kw in SUSPICIOUS_KEYWORDS)
 
-    # 3. Redirect chain inspection
-    redirect_res = trace_redirect_chain(url)
-    if redirect_res["flagged"]:
-        if redirect_res["has_credential_form"]:
-            signals.append("CREDENTIAL_HARVEST_LANDING_PAGE")
-            confidence = max(confidence, 85.0)
-        else:
-            signals.append("EXCESSIVE_REDIRECT_CHAIN")
-            confidence = max(confidence, 60.0)
-        explanation_points.append(redirect_res["explanation"])
+    if has_suspicious_tld:
+        signals.append("DISPOSABLE_RISKY_TLD")
+        confidence = max(confidence, 72.0)
+        explanation_points.append(f"Domain '{domain}' uses a disposable or high-abuse TLD.")
+
+    if has_suspicious_kw:
+        signals.append("CREDENTIAL_PHISH_KEYWORD_DOMAIN")
+        confidence = max(confidence, 78.0)
+        explanation_points.append(f"URL contains high-risk credential-phishing nomenclature.")
+
+    age_res = {"flagged": False, "age_days": None, "explanation": "Skipped in fast scan"}
+    redirect_res = {"flagged": False, "explanation": "Skipped in fast scan"}
+
+    if not fast_scan:
+        # 3. WHOIS age check
+        age_res = check_domain_age(domain, max_age_days=max_domain_age_days)
+        if age_res["flagged"]:
+            signals.append("NEWLY_REGISTERED_DOMAIN")
+            confidence = max(confidence, 78.0)
+            explanation_points.append(age_res["explanation"])
+
+        # 4. Redirect chain inspection
+        redirect_res = trace_redirect_chain(url, timeout=3)
+        if redirect_res["flagged"]:
+            if redirect_res.get("has_credential_form"):
+                signals.append("CREDENTIAL_HARVEST_LANDING_PAGE")
+                confidence = max(confidence, 85.0)
+            else:
+                signals.append("EXCESSIVE_REDIRECT_CHAIN")
+                confidence = max(confidence, 60.0)
+            explanation_points.append(redirect_res["explanation"])
 
     flagged = len(signals) > 0
     if not flagged:

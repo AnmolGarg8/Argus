@@ -96,13 +96,13 @@ class SenderBehaviorProfile:
         text = msg.get("email_text", "")
         style = compute_stylistic_features(text)
 
-        # Style similarity against sender corpus
+        # Style similarity against sender corpus (use max similarity across sender's historical emails)
         cos_sim = 0.5
         if self.baseline_matrix is not None and text:
             try:
                 vec = self.vectorizer.transform([text])
                 sims = cosine_similarity(vec, self.baseline_matrix)
-                cos_sim = float(np.mean(sims))
+                cos_sim = float(np.max(sims))
             except Exception:
                 cos_sim = 0.5
 
@@ -177,16 +177,19 @@ class SenderBehaviorProfile:
         recipients = message.get("recipients", [])
         if isinstance(recipients, str):
             recipients = [r.strip() for r in recipients.split(",") if r.strip()]
-        new_recipients = [r for r in recipients if r not in self.typical_recipients]
-        if len(new_recipients) >= 2 and len(recipients) > 0:
+        new_recipients = [
+            r for r in recipients
+            if r not in self.typical_recipients and not any(r.endswith(d) for d in [".gov", "cityhall.gov", ".internal"])
+        ]
+        if len(new_recipients) >= 1 and len(recipients) > 0:
             signals.append("ANOMALOUS_RECIPIENT_CLUSTER")
-            deviations["recipient_anomaly"] = f"Contains {len(new_recipients)} unfamiliar recipient(s)."
+            deviations["recipient_anomaly"] = f"Contains {len(new_recipients)} unfamiliar external recipient(s)."
 
         # 3. Writing style deviation check
         text = message.get("email_text", "")
         style = compute_stylistic_features(text)
         cos_sim = vec[-1]
-        if cos_sim < 0.15 and len(text.split()) > 8:
+        if cos_sim < 0.05 and len(text.split()) > 10:
             signals.append("LINGUISTIC_STYLE_DEVIATION")
             deviations["style_drift"] = (
                 f"Low stylistic similarity ({cos_sim:.2f}) with sender historical corpus. "
@@ -194,11 +197,11 @@ class SenderBehaviorProfile:
             )
 
         # 4. Attachment anomaly
-        if message.get("has_attachment") and not any(m.get("has_attachment") for m in []):
-            if "has_attachment" in message and message["has_attachment"]:
-                deviations["attachment_anomaly"] = "Uncharacteristic file attachment transmitted."
+        if message.get("has_attachment") and self.stats.get("attachment_frequency", 0.2) < 0.05:
+            signals.append("UNEXPECTED_ATTACHMENT")
+            deviations["attachment_anomaly"] = "Uncharacteristic file attachment transmitted."
 
-        is_flagged = (pred == -1) or (len(signals) >= 1)
+        is_flagged = (len(signals) >= 1) or (pred == -1 and raw_score < -0.15)
 
         if is_flagged:
             # Scale confidence based on anomaly score and signal count
@@ -235,13 +238,25 @@ def generate_sender_synthetic_history(sender_id: str, n: int = 25) -> list[dict]
         "Thanks for the update. Let's schedule a brief sync call tomorrow morning.",
         "Reminder: Departmental timesheet approval window closes at 5 PM today.",
         "The project timeline has been updated on the municipal intranet portal.",
+        "Hi team, please find the quarterly report attached. Let me know if you have questions.",
+        "Reminder: Staff meeting tomorrow at 10 AM in conference room B.",
+        "The new parking policy takes effect next Monday. See attached memo.",
+        "Could you review the budget proposal and send feedback by Friday?",
+        "Attached is the updated employee handbook for your review.",
+        "Weekly sync notes from today's standup are in the shared drive.",
     ]
 
     for i in range(n):
         history.append({
             "sender_id": sender_id,
             "send_hour": int(np.random.choice(range(8, 18))),  # Standard 8 AM - 6 PM
-            "recipients": [f"{dept_prefix}_lead@cityhall.gov", f"colleague_{i%3}@cityhall.gov"],
+            "recipients": [
+                f"{dept_prefix}_lead@cityhall.gov",
+                "team@cityhall.gov",
+                f"{dept_prefix}_team@cityhall.gov",
+                "all_staff@cityhall.gov",
+                "admin@cityhall.gov",
+            ],
             "has_attachment": bool(i % 5 == 0),
             "email_text": standard_templates[i % len(standard_templates)],
         })

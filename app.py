@@ -1,8 +1,9 @@
 """
-AI Adaptive XDR – AIRAVAT
+Argus — AI-Powered Phishing Detection & Civic Cyber Shield
 Main Streamlit Dashboard
 """
 
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -35,7 +36,7 @@ from PIL import Image
 
 # ── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AI Adaptive XDR – AIRAVAT",
+    page_title="Argus — AI-Powered Phishing Detection & Civic Cyber Shield",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -65,7 +66,7 @@ st.markdown("""
 <div class="cyber-navbar">
     <div class="nav-left">
         <div style="font-size:1.5rem; color:#00D4FF; margin-right:1rem;">☰</div>
-        <div class="nav-logo">AIRAVAT // XDR</div>
+        <div class="nav-logo">ARGUS // XDR</div>
     </div>
     <div class="nav-right">
         <div class="status-indicator">
@@ -183,12 +184,79 @@ def load_models():
 
 anomaly_detector, phishing_detector = load_models()
 
+def evaluate_events_pipeline(df_events: pd.DataFrame) -> pd.DataFrame:
+    """
+    Main detection pipeline running all independent detection layers:
+      - Content Intelligence (TF-IDF + LR)
+      - Infrastructure Analysis (Lookalikes, WHOIS, TLDs, and keywords)
+      - Sender Behavior Modeling (Per-account Isolation Forest baselines)
+      - Attachment Screening (Dangerous extensions)
+      - System Telemetry Anomaly (Isolation Forest on login times, transfers, failed logins)
+    Note: Page Similarity (visual_result) requires screenshot inputs and is available
+    interactively in the Multi-Vector Threat Inspection Lab tab.
+
+    Resolves threat severity using evaluate_multilayer_threat() ("highest confidence flag wins").
+    """
+    df_scored = df_events.copy()
+    # Step 1: Baseline Anomaly & Phishing NLP
+    df_scored = anomaly_detector.predict(df_scored)
+    df_scored = phishing_detector.predict(df_scored)
+
+    risk_scores = []
+    risk_levels = []
+    layers_fired_list = []
+
+    for _, row in df_scored.iterrows():
+        # 1. Content Result
+        content_res = {"phishing_probability": float(row.get("phishing_probability", 0.0))}
+
+        # 2. Infrastructure Result
+        url = row.get("url", "")
+        infra_res = analyze_infrastructure(url, fast_scan=True) if url else None
+
+        # 3. Sender Behavior Result
+        s_feat = {
+            "send_hour": row.get("send_hour", row.get("login_hour", 12)),
+            "recipients": row.get("recipients", ""),
+            "has_attachment": row.get("has_attachment", False),
+            "email_text": row.get("email_text", ""),
+        }
+        sender_id = row.get("sender_id", row.get("user_id", "staff_user"))
+        sender_res = analyze_sender_behavior(sender_id, s_feat)
+
+        # 4. Attachment Result
+        att_name = row.get("attachment_name", "")
+        att_res = analyze_attachment(att_name) if att_name else None
+
+        # 5. System Telemetry Anomaly Result
+        anomaly_res = {
+            "anomaly_flag": bool(row.get("anomaly_flag", 0)),
+            "anomaly_score": float(row.get("anomaly_score", 0.0)),
+        }
+
+        # Multi-layer independent evaluation
+        decision = evaluate_multilayer_threat(
+            content_result=content_res,
+            infra_result=infra_res,
+            visual_result=None,  # Available manually in the Visual Lab tab
+            sender_result=sender_res,
+            attachment_result=att_res,
+            anomaly_result=anomaly_res,
+        )
+
+        risk_scores.append(decision["max_confidence"])
+        risk_levels.append(decision["risk_level"])
+        layers_fired_list.append(", ".join(decision["firing_layers"]) if decision["firing_layers"] else "None")
+
+    df_scored["risk_score"] = risk_scores
+    df_scored["risk_level"] = risk_levels
+    df_scored["layers_fired"] = layers_fired_list
+    return df_scored
+
 # ── Session State ────────────────────────────────────────────────────────────
 if "event_log" not in st.session_state:
     baseline = generate_normal_activity(80)
-    baseline = anomaly_detector.predict(baseline)
-    baseline = phishing_detector.predict(baseline)
-    baseline = compute_risk_scores(baseline)
+    baseline = evaluate_events_pipeline(baseline)
     st.session_state.event_log = baseline
     st.session_state.incidents = process_incidents(baseline)
     st.session_state.attack_history = []
@@ -376,11 +444,9 @@ st.markdown("""
 sim_col1, sim_col2, sim_col3 = st.columns(3)
 
 def run_simulation(attack_fn, attack_name):
-    """Run an attack simulation and update state."""
+    """Run an attack simulation through all independent detection layers and update state."""
     new_events = attack_fn()
-    new_events = anomaly_detector.predict(new_events)
-    new_events = phishing_detector.predict(new_events)
-    new_events = compute_risk_scores(new_events)
+    new_events = evaluate_events_pipeline(new_events)
     st.session_state.event_log = pd.concat([st.session_state.event_log, new_events], ignore_index=True)
     new_incidents = process_incidents(new_events)
     st.session_state.incidents.extend(new_incidents)
@@ -430,8 +496,8 @@ if st.session_state.incidents:
     inc_df = pd.DataFrame(st.session_state.incidents)
     inc_df = inc_df.sort_values("risk_score", ascending=False)
 
-    display_df = inc_df[["timestamp", "user_id", "department", "event_type", "risk_score", "risk_level", "action"]].copy()
-    display_df.columns = ["Timestamp", "User", "Department", "Threat Type", "Risk Score", "Severity", "Action"]
+    display_df = inc_df[["timestamp", "user_id", "department", "event_type", "layers_fired", "risk_score", "risk_level", "action"]].copy()
+    display_df.columns = ["Timestamp", "User", "Department", "Threat Type", "Fired Layer(s)", "Risk Score", "Severity", "Action"]
 
     def color_severity(val):
         colors = {"CRITICAL": "#ff2d55", "HIGH": "#ff6b35", "MEDIUM": "#ffaa00", "LOW": "#00e676"}
@@ -686,7 +752,7 @@ with tab_feedback:
 st.markdown("---")
 st.markdown(
     "<div style='text-align:center; color:#3a4a5a; font-size:0.8rem;'>"
-    "AI Adaptive XDR – AIRAVAT • Multi-Layer Threat Architecture & Analyst Feedback Loop • "
+    "Argus — AI-Powered Phishing Detection & Civic Cyber Shield • Multi-Layer Independent Architecture • "
     f"Events Processed: {len(df)} • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     "</div>",
     unsafe_allow_html=True,
