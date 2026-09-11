@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIRAVAT // DEFENSE HUB</title>
+    <style>
+        /* Absolute Block for Stlite Loader */
+        #stlite-main-loading, .stlite-kernel-status, #loading-screen { display: none !important; }
+
+        body, html { margin: 0; padding: 0; background: #000000; color: #f8fafc; font-family: 'Inter', sans-serif; height: 100%; overflow: hidden; }
+        
+        #intro-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999999;
+            transition: opacity 1.2s ease, transform 1s cubic-bezier(0.77, 0, 0.175, 1);
+        }
+
+        .info-card {
+            max-width: 450px; background: rgba(0, 212, 255, 0.02);
+            border: 1px solid rgba(0, 212, 255, 0.2); border-radius: 4px;
+            padding: 50px; text-align: center;
+        }
+
+        h1 { font-size: 2rem; font-weight: 800; margin-bottom: 5px; color: #ffffff; letter-spacing: 4px; }
+        .tagline { color: #00D4FF; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; font-size: 0.7rem; margin-bottom: 40px; opacity: 0.8; }
+        
+        .feature-list { text-align: left; margin: 30px 0; color: #94a3b8; font-size: 0.85rem; font-family: 'monospace'; }
+        .feature-item { margin-bottom: 15px; display: flex; align-items: center; border-left: 2px solid #00D4FF; padding-left: 20px; }
+
+        .loader-container { margin-top: 50px; }
+        .progress-track { width: 100%; height: 2px; background: rgba(255,255,255,0.05); overflow: hidden; }
+        .progress-bar { width: 0%; height: 100%; background: #00D4FF; animation: fillProgress 12s forwards cubic-bezier(0.1, 0, 0.1, 1); }
+        @keyframes fillProgress { from { width: 0%; } to { width: 98%; } }
+        
+        .loading-text { font-size: 0.65rem; color: #475569; letter-spacing: 2px; margin-top: 15px; text-transform: uppercase; font-weight: 700; }
+
+        #root { opacity: 0; transition: opacity 1s ease; width: 100%; height: 100vh; }
+        .ready #intro-screen { transform: translateY(-100%); opacity: 0; }
+        .ready #root { opacity: 1; }
+
+        /* Unauthorized Device Popup Styles */
+        #unauthorized-device-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 99999999;
+            background: rgba(10, 0, 0, 0.95);
+            border: 2px solid #ff0000;
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.4);
+            padding: 40px;
+            width: 400px;
+            text-align: center;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            font-family: 'JetBrains Mono', monospace;
+            animation: alertPulse 1.5s infinite;
+        }
+
+        @keyframes alertPulse {
+            0% { box-shadow: 0 0 30px rgba(255, 0, 0, 0.3); }
+            50% { box-shadow: 0 0 70px rgba(255, 0, 0, 0.6); }
+            100% { box-shadow: 0 0 30px rgba(255, 0, 0, 0.3); }
+        }
+
+        .alert-title {
+            color: #ff0000;
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        .alert-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .alert-msg {
+            color: #ffffff;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .close-alert-btn {
+            background: #ff0000;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 1px;
+        }
+
+        .close-alert-btn:hover {
+            background: #ffffff;
+            color: #000000;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+
+        #hardware-guard-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 0.6rem;
+            color: #475569;
+            z-index: 999999;
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+
+        #hardware-guard-status .status-dot {
+            width: 6px;
+            height: 6px;
+            background: #00D4FF;
+            border-radius: 50%;
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+    </style>
+    <link rel="stylesheet" href="cyber-theme.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.58.1/build/stlite.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="intro-screen">
+        <div class="info-card">
+            <h1>AIRAVAT</h1>
+            <div class="tagline">Defense Intelligence Node</div>
+            
+            <div class="feature-list">
+                <div class="feature-item">NEURAL ANOMALY DETECTION</div>
+                <div class="feature-item">PHISHING INTEL PROTOCOL</div>
+                <div class="feature-item">3D THREAT TOPOLOGY MAP</div>
+                <div class="feature-item">AUTONOMOUS RISK ENGINE</div>
+            </div>
+
+            <div class="loader-container">
+                <div class="progress-track"><div class="progress-bar"></div></div>
+                <div class="loading-text">BOOTING SECURE_KERNEL...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="root"></div>
+
+    <!-- Alert Popup -->
+    <div id="unauthorized-device-popup">
+        <span class="alert-icon">⚠️</span>
+        <div class="alert-title">CRITICAL ALERT</div>
+        <div class="alert-msg">
+            UNAUTHORIZED DEVICE DETECTED<br>
+            <span style="color: #475569; font-size: 0.7rem;">Hardware Intercepted at Port Node 0.1</span>
+        </div>
+        <button class="close-alert-btn" onclick="hideAlert()">Clear Warning</button>
+        <div style="margin-top: 15px; font-size: 0.6rem; color: #475569;">SECURE_KERNEL // OVERRIDE_ENABLED</div>
+    </div>
+
+    <!-- Background Sensor Status -->
+    <div id="hardware-guard-status">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div id="status-dot-outer" class="status-dot"></div>
+            <span>HW_GUARD: <span id="guard-status-text" style="color: #00D4FF;">ACTIVE</span></span>
+        </div>
+        <div onclick="manualPairingPrompt()" style="margin-left: 15px; cursor: pointer; color: #94a3b8; text-decoration: underline; font-size: 0.6rem;">[PAIR_NEW_UNIT]</div>
+        <div onclick="showAlert()" id="test-btn-outer" style="margin-left: 15px; cursor: pointer; color: #ff0000; text-decoration: underline; font-weight: bold;">[TEST_POPUP]</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.58.1/build/stlite.js"></script>
+    <script>
+        // ── [SEC_KERNEL] PROMPT_ASSASSIN ──────────────────────────────────────
+        if (navigator.usb) {
+            const _realRequestDevice = navigator.usb.requestDevice.bind(navigator.usb);
+            navigator.usb.requestDevice = function(options) {
+                if (window._KERNEL_AUTH) {
+                    window._KERNEL_AUTH = false;
+                    return _realRequestDevice(options);
+                }
+                return new Promise(() => {});
+            };
+        }
+
+        // ── Multi-Vector Hardware Intelligence ────────────────────────────────
+        let lastTopologyHash = "";
+        let calibrationFinished = false;
+        let systemInterrupted = false;
+        let lastBatteryState = null;
+
+        async function getDetailedTopologyHash() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                // We hash everything: Count, Kinds, and unique ID lengths
+                return devices.length + devices.map(d => d.kind + (d.deviceId ? d.deviceId.length : "")).join(':');
+            } catch(e) { return ""; }
+        }
+
+        // Detection Vector 1: Power-Draw Monitoring (iPhone Charging Detection)
+        if (navigator.getBattery) {
+            navigator.getBattery().then(batt => {
+                lastBatteryState = batt.charging + batt.level;
+                batt.addEventListener('chargingchange', () => {
+                    console.warn("[SEC_KERNEL] Power-Draw Anomaly Measured.");
+                    showAlert("HIDDEN POWER TAP DETECTED");
+                });
+            });
+        }
+
+        async function monitorHardwareTopology() {
+            const currentHash = await getDetailedTopologyHash();
+            
+            if (!calibrationFinished) {
+                if (currentHash) {
+                    lastTopologyHash = currentHash;
+                    calibrationFinished = true;
+                }
+                return;
+            }
+
+            if (currentHash !== lastTopologyHash && currentHash !== "") {
+                console.warn("[SEC_KERNEL] Hardware Topology Shift.");
+                showAlert("EXTERNAL HARDWARE PULSE");
+                lastTopologyHash = currentHash;
+            }
+
+            // Vector 2: Gamepad Intercept
+            try {
+                const gps = navigator.getGamepads();
+                for (let gp of gps) {
+                    if (gp && !window._gp_set) {
+                        showAlert(`HID_NODE: ${gp.id}`);
+                        window._gp_set = true;
+                    }
+                }
+            } catch(e) {}
+        }
+
+        // Vector 3: Ultra-High Frequency Heartbeat (50ms)
+        setInterval(monitorHardwareTopology, 50);
+
+        // Vector 4: OS Intercept (Focus Anomaly)
+        window.onblur = () => { systemInterrupted = true; };
+        window.onfocus = () => {
+            if (systemInterrupted) {
+                console.log("[SEC_KERNEL] Focus Shift - Verifying Air-Gap Integrity...");
+                monitorHardwareTopology();
+                systemInterrupted = false;
+            }
+        };
+
+        function showAlert(deviceName = "UNAUTHORIZED HARDWARE") {
+            const popup = document.getElementById('unauthorized-device-popup');
+            const alertMsg = popup.querySelector('.alert-msg');
+            
+            alertMsg.innerHTML = `
+                <span style="color: #ff0000; font-weight: bold;">${deviceName === "UNAUTHORIZED HARDWARE" ? "UNAUTHORIZED DEVICE DETECTED" : deviceName}</span><br>
+                <span style="color: #475569; font-size: 0.7rem;">Hardware Intercepted at Port Node 0.1</span>
+            `;
+
+            popup.style.display = 'block';
+            
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                
+                const playTone = (freq, startOffset, duration) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime + startOffset);
+                    gain.gain.setValueAtTime(0.4, audioCtx.currentTime + startOffset);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + startOffset + duration);
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.start(audioCtx.currentTime + startOffset);
+                    osc.stop(audioCtx.currentTime + startOffset + duration);
+                };
+                playTone(440, 0, 0.4);
+                playTone(880, 0.1, 0.4);
+            } catch(e) {}
+        }
+
+        function hideAlert() {
+            document.getElementById('unauthorized-device-popup').style.display = 'none';
+        }
+
+        function manualPairingPrompt() {
+            window._KERNEL_AUTH = true;
+            if (navigator.usb) {
+                navigator.usb.requestDevice({ filters: [] })
+                    .then(device => showAlert(device.productName))
+                    .catch(() => { window._KERNEL_AUTH = false; });
+            }
+        }
+
+        if (navigator.usb) {
+            navigator.usb.addEventListener('connect', (e) => showAlert(e.device.productName || "USB_NODE"));
+        }
+        window.addEventListener("devicechange", monitorHardwareTopology);
+
+        // ── Boot Sequence ─────────────────────────────────────────────────────
+        stlite.mount({
+            requirements: ["pandas", "numpy", "plotly", "scikit-learn"],
+            entrypoint: "app.py",
+            files: {
+                "app.py": { url: "./app.py" },
+                "cyber-theme.css": { url: "./cyber-theme.css" },
+                "anomaly.py": { url: "./anomaly.py" },
+                "phishing.py": { url: "./phishing.py" },
+                "risk_engine.py": { url: "./risk_engine.py" },
+                "simulator.py": { url: "./simulator.py" },
+                "incident_response.py": { url: "./incident_response.py" },
+                "globe_map.py": { url: "./globe_map.py" },
+            },
+        }, document.getElementById("root"));
+
+        const appCheck = setInterval(() => {
+            if (document.querySelector('.stApp')) {
+                clearInterval(appCheck);
+                setTimeout(() => {
+                    document.body.classList.add('ready');
+                    window.dispatchEvent(new Event('resize'));
+                    monitorHardwareTopology();
+                }, 800);
+            }
+        }, 100);
+    </script>
+</body>
+</html>
