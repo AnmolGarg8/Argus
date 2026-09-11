@@ -62,7 +62,7 @@ def render_3d_globe(incidents_df, height=550):
     <body>
         <div id="scene-container">
             <div class="hud">
-                <div class="brand">AIRAVAT // <span style="opacity:0.6; color:#fff;">TACTICAL_V11</span></div>
+                <div class="brand">ARGUS // <span style="opacity:0.6; color:#fff;">TACTICAL_V11</span></div>
                 <div class="recon-panel">
                     <input type="text" id="target-ip" placeholder="INPUT://TARGET_IP">
                     <button class="main-btn" onclick="runTrace()">EXEC_RECON_LOCK</button>
@@ -84,12 +84,14 @@ def render_3d_globe(incidents_df, height=550):
 
             function init() {
                 scene = new THREE.Scene();
-                camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 1, 3000);
+                const width = container.clientWidth || window.innerWidth || 1200;
+                const height = container.clientHeight || __HEIGHT__;
+                camera = new THREE.PerspectiveCamera(35, width / height, 1, 3000);
                 camera.position.z = 600;
 
                 renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                renderer.setSize(container.clientWidth, container.clientHeight);
-                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(width, height);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
                 container.appendChild(renderer.domElement);
 
                 controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -115,18 +117,46 @@ def render_3d_globe(incidents_df, height=550):
             }
 
             function createGlobe() {
+                // Instantly render base cyber sphere with wireframe grid for instant visibility
+                const sphereGeo = new THREE.SphereGeometry(radius, 48, 48);
+                const baseMat = new THREE.MeshPhongMaterial({
+                    color: 0x051329,
+                    emissive: 0x020a17,
+                    shininess: 25,
+                });
+                const baseMesh = new THREE.Mesh(sphereGeo, baseMat);
+                globeGroup.add(baseMesh);
+
+                const wireMat = new THREE.MeshBasicMaterial({
+                    color: 0x00d4ff,
+                    wireframe: true,
+                    transparent: true,
+                    opacity: 0.18
+                });
+                globeGroup.add(new THREE.Mesh(sphereGeo, wireMat));
+
+                // Asynchronously load high-res Earth texture onto baseMesh if network permits
                 const loader = new THREE.TextureLoader();
                 loader.setCrossOrigin('Anonymous');
                 loader.load('https://raw.githubusercontent.com/turban/webgl-earth/master/images/2_no_clouds_4k.jpg', (tex) => {
-                    const mat = new THREE.MeshPhongMaterial({ map: tex, shininess: 15 });
-                    globeGroup.add(new THREE.Mesh(new THREE.SphereGeometry(radius, 64, 64), mat));
-                    loader.load('https://unpkg.com/three-globe/example/img/earth-clouds.png', (cloudTex) => {
-                        clouds = new THREE.Mesh(
-                            new THREE.SphereGeometry(radius + 2, 64, 64),
-                            new THREE.MeshLambertMaterial({ map: cloudTex, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending })
-                        );
-                        globeGroup.add(clouds);
+                    baseMesh.material.map = tex;
+                    baseMesh.material.color.setHex(0xffffff);
+                    baseMesh.material.needsUpdate = true;
+                }, undefined, () => {
+                    // Fallback to unpkg texture
+                    loader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg', (tex2) => {
+                        baseMesh.material.map = tex2;
+                        baseMesh.material.color.setHex(0xffffff);
+                        baseMesh.material.needsUpdate = true;
                     });
+                });
+
+                loader.load('https://unpkg.com/three-globe/example/img/earth-clouds.png', (cloudTex) => {
+                    clouds = new THREE.Mesh(
+                        new THREE.SphereGeometry(radius + 2, 48, 48),
+                        new THREE.MeshLambertMaterial({ map: cloudTex, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending })
+                    );
+                    globeGroup.add(clouds);
                 });
             }
 

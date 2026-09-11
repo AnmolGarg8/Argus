@@ -58,7 +58,7 @@ class SenderBehaviorProfile:
 
     def __init__(self, sender_id: str):
         self.sender_id = sender_id
-        self.model = IsolationForest(contamination=0.10, random_state=42)
+        self.model = IsolationForest(n_estimators=30, contamination=0.10, random_state=42)
         self.vectorizer = TfidfVectorizer(max_features=250, stop_words="english")
         self.baseline_texts = []
         self.baseline_matrix = None
@@ -227,7 +227,7 @@ class SenderBehaviorProfile:
 _SENDER_REGISTRY: dict[str, SenderBehaviorProfile] = {}
 
 
-def generate_sender_synthetic_history(sender_id: str, n: int = 25) -> list[dict]:
+def generate_sender_synthetic_history(sender_id: str, n: int = 12) -> list[dict]:
     """Generate typical historical sent messages for initializing a sender baseline."""
     history = []
     dept_prefix = sender_id.split("_")[0] if "_" in sender_id else "staff"

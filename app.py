@@ -44,7 +44,7 @@ st.set_page_config(
 
 # ── Cyber Aesthetic Injection ───────────────────────────────────────────────
 try:
-    with open("cyber-theme.css", "r") as f:
+    with open("cyber-theme.css", "r", encoding="utf-8") as f:
         theme_css = f.read()
         st.markdown(f"<style>{theme_css}</style>", unsafe_allow_html=True)
 except Exception:
@@ -53,19 +53,27 @@ except Exception:
 # ── Hide Streamlit default header/footer & Menu ──────────────────────────────
 st.markdown("""
 <style>
-    header, [data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu {
+    header[data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu {
         display: none !important;
         visibility: hidden !important;
+        height: 0 !important;
     }
-    .stApp { top: -70px; }
+    .stApp {
+        background-color: #000000 !important;
+    }
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 96% !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sticky Navbar (no JS needed here, purely visual) ─────────────────────────
+# ── Sticky Navbar (purely visual cyber header) ──────────────────────────────
 st.markdown("""
 <div class="cyber-navbar">
     <div class="nav-left">
-        <div style="font-size:1.5rem; color:#00D4FF; margin-right:1rem;">☰</div>
+        <div style="font-size:1.4rem; color:#00D4FF; margin-right:0.75rem;">☰</div>
         <div class="nav-logo">ARGUS // XDR</div>
     </div>
     <div class="nav-right">
@@ -77,7 +85,6 @@ st.markdown("""
         <div style="width:32px; height:32px; background:#00D4FF; border-radius:3px; display:flex; align-items:center; justify-content:center; color:#000; font-weight:900; font-size:0.8rem;">AG</div>
     </div>
 </div>
-<div style="margin-top: 45px;"></div>
 """, unsafe_allow_html=True)
 
 # ── Hardware Guard (Autonomous Kernel Integration) ───────────────────────────
@@ -503,8 +510,14 @@ if st.session_state.incidents:
         colors = {"CRITICAL": "#ff2d55", "HIGH": "#ff6b35", "MEDIUM": "#ffaa00", "LOW": "#00e676"}
         return f"color: {colors.get(val, '#e0e6ed')}"
 
+    styler = display_df.head(20).style
+    if hasattr(styler, "map"):
+        styled_df = styler.map(color_severity, subset=["Severity"])
+    else:
+        styled_df = styler.applymap(color_severity, subset=["Severity"])
+
     st.dataframe(
-        display_df.head(20).style.applymap(color_severity, subset=["Severity"]),
+        styled_df,
         use_container_width=True,
         height=350,
     )
