@@ -617,13 +617,17 @@ with tab_content:
         if st.button("🚀 Analyze Content Intent", use_container_width=True):
             ci_res = analyze_content(ci_sample)
             st.markdown("---")
-            if ci_res["flagged"]:
-                st.error(f"🚨 **Phishing Intent Detected!** Confidence: {ci_res['confidence']:.1f}%")
-                st.write(f"**Intent Patterns Found:** {', '.join(ci_res['intent_patterns']) if ci_res['intent_patterns'] else 'Statistical Phishing Distribution'}")
-                st.caption(ci_res["explanation"])
+            ci_flagged = ci_res.get("flagged", False)
+            ci_conf = ci_res.get("confidence", ci_res.get("risk_score", 0.0))
+            ci_patterns = ci_res.get("intent_patterns", [])
+            ci_expl = ci_res.get("explanation", "")
+            if ci_flagged:
+                st.error(f"🚨 **Phishing Intent Detected!** Confidence: {ci_conf:.1f}%")
+                st.write(f"**Intent Patterns Found:** {', '.join(ci_patterns) if ci_patterns else 'Statistical Phishing Distribution'}")
+                st.caption(ci_expl)
             else:
-                st.success(f"✅ **Message Appears Clean.** (Risk: {ci_res['risk_score']:.1f}%)")
-                st.caption(ci_res["explanation"])
+                st.success(f"✅ **Message Appears Clean.** (Risk: {ci_conf:.1f}%)")
+                st.caption(ci_expl)
 
 # ── Tab 2: Domain Infrastructure
 with tab_infra:

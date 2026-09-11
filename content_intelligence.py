@@ -138,6 +138,7 @@ class ContentIntelligenceClassifier:
         if not text_clean:
             return {
                 "risk_score": 0.0,
+                "confidence": 0.0,
                 "phishing_probability": 0.0,
                 "intent_patterns": [],
                 "flagged": False,
@@ -179,6 +180,7 @@ class ContentIntelligenceClassifier:
 
         return {
             "risk_score": round(risk_score, 1),
+            "confidence": round(risk_score, 1),
             "phishing_probability": round(prob, 3),
             "intent_patterns": patterns,
             "flagged": flagged,
