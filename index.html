@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIRAVAT // DEFENSE HUB</title>
+    <title>ARGUS // CYBER DEFENSE HUB</title>
     <style>
         /* Absolute Block for Stlite Loader */
         #stlite-main-loading, .stlite-kernel-status, #loading-screen { display: none !important; }
@@ -61,59 +61,35 @@
         }
 
         @keyframes alertPulse {
-            0% { box-shadow: 0 0 30px rgba(255, 0, 0, 0.3); }
-            50% { box-shadow: 0 0 70px rgba(255, 0, 0, 0.6); }
-            100% { box-shadow: 0 0 30px rgba(255, 0, 0, 0.3); }
+            0%, 100% { border-color: #ff0000; box-shadow: 0 0 30px rgba(255,0,0,0.3); }
+            50% { border-color: #ff5555; box-shadow: 0 0 60px rgba(255,0,0,0.6); }
         }
 
-        .alert-title {
-            color: #ff0000;
-            font-size: 1.5rem;
-            font-weight: 800;
-            margin-bottom: 20px;
-            letter-spacing: 2px;
+        .alert-icon { font-size: 3rem; margin-bottom: 10px; display: block; animation: shake 0.5s infinite; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
         }
 
-        .alert-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            display: block;
-        }
-
-        .alert-msg {
-            color: #ffffff;
-            font-size: 0.9rem;
-            line-height: 1.6;
-            margin-bottom: 30px;
-        }
-
+        .alert-title { color: #ff0000; font-size: 1.2rem; font-weight: 900; letter-spacing: 2px; margin-bottom: 10px; }
+        .alert-msg { color: #ffffff; font-size: 0.85rem; margin-bottom: 25px; line-height: 1.5; }
         .close-alert-btn {
-            background: #ff0000;
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            font-family: 'JetBrains Mono', monospace;
-            text-transform: uppercase;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            letter-spacing: 1px;
+            background: #ff0000; color: #ffffff; border: none; padding: 10px 20px;
+            font-family: 'JetBrains Mono', monospace; font-weight: bold; cursor: pointer;
+            border-radius: 4px; transition: all 0.3s;
         }
+        .close-alert-btn:hover { background: #cc0000; box-shadow: 0 0 15px #ff0000; }
 
-        .close-alert-btn:hover {
-            background: #ffffff;
-            color: #000000;
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-        }
-
+        /* Subtle Hardware Guard Status in background */
         #hardware-guard-status {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            font-size: 0.6rem;
-            color: #475569;
-            z-index: 999999;
+            bottom: 10px;
+            left: 10px;
+            z-index: 9999;
             font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: #475569;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -143,14 +119,15 @@
 <body>
     <div id="intro-screen">
         <div class="info-card">
-            <h1>AIRAVAT</h1>
-            <div class="tagline">Defense Intelligence Node</div>
+            <h1>ARGUS</h1>
+            <div class="tagline">Civic Cyber Shield // AI Defense</div>
             
             <div class="feature-list">
-                <div class="feature-item">NEURAL ANOMALY DETECTION</div>
-                <div class="feature-item">PHISHING INTEL PROTOCOL</div>
-                <div class="feature-item">3D THREAT TOPOLOGY MAP</div>
-                <div class="feature-item">AUTONOMOUS RISK ENGINE</div>
+                <div class="feature-item">MULTI-VECTOR PHISHING INTEL</div>
+                <div class="feature-item">INFRASTRUCTURE & LOOKALIKE SCAN</div>
+                <div class="feature-item">PER-ACCOUNT SENDER BASELINES</div>
+                <div class="feature-item">PERCEPTUAL HASH PAGE SIMILARITY</div>
+                <div class="feature-item">3D THREAT TOPOLOGY GLOBE</div>
             </div>
 
             <div class="loader-container">
@@ -327,6 +304,10 @@
                 "simulator.py": { url: "./simulator.py" },
                 "incident_response.py": { url: "./incident_response.py" },
                 "globe_map.py": { url: "./globe_map.py" },
+                "infrastructure_analysis.py": { url: "./infrastructure_analysis.py" },
+                "page_similarity.py": { url: "./page_similarity.py" },
+                "sender_behavior.py": { url: "./sender_behavior.py" },
+                "attachment_qr_inspection.py": { url: "./attachment_qr_inspection.py" },
             },
         }, document.getElementById("root"));
 

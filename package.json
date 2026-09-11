@@ -1,0 +1,9 @@
+{
+  "name": "argus",
+  "version": "1.0.0",
+  "description": "Argus - AI-Powered Phishing Detection for Organisations",
+  "scripts": {
+    "dev": "python -m streamlit run app.py",
+    "start": "python -m streamlit run app.py"
+  }
+}
