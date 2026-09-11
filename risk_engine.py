@@ -5,36 +5,63 @@ Supports highest-confidence flag resolution and SQLite analyst feedback logging.
 """
 
 import os
-import sqlite3
+import json
 import datetime
 import numpy as np
 import pandas as pd
 
-# Path to persistent analyst feedback database
+# Safe import for sqlite3 (unavailable in Pyodide/stlite on Vercel)
+try:
+    import sqlite3
+except ImportError:
+    sqlite3 = None
+
+# Paths to persistent analyst feedback databases
 FEEDBACK_DB_PATH = os.path.join(os.path.dirname(__file__), "data", "analyst_feedback.db")
+FEEDBACK_JSON_PATH = os.path.join(os.path.dirname(__file__), "data", "analyst_feedback.json")
+
+# In-memory storage for environments where both SQLite and local file writes are restricted
+_IN_MEMORY_FEEDBACK: list[dict] = []
 
 
 def init_feedback_db():
-    """Ensure feedback database and table exist."""
-    os.makedirs(os.path.dirname(FEEDBACK_DB_PATH), exist_ok=True)
-    with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS analyst_feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                incident_id TEXT,
-                timestamp TEXT,
-                analyst_decision TEXT,     -- 'CONFIRMED' or 'OVERRIDDEN'
-                layer_fired TEXT,          -- comma-separated layers
-                original_risk_level TEXT,
-                analyst_verdict TEXT,      -- 'MALICIOUS', 'BENIGN', 'FALSE_POSITIVE'
-                analyst_notes TEXT
-            )
-        """)
-        conn.commit()
+    """Ensure feedback database and table exist (SQLite or JSON fallback)."""
+    try:
+        os.makedirs(os.path.dirname(FEEDBACK_DB_PATH), exist_ok=True)
+    except Exception:
+        pass
+
+    if sqlite3 is not None:
+        try:
+            with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS analyst_feedback (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        incident_id TEXT,
+                        timestamp TEXT,
+                        analyst_decision TEXT,     -- 'CONFIRMED' or 'OVERRIDDEN'
+                        layer_fired TEXT,          -- comma-separated layers
+                        original_risk_level TEXT,
+                        analyst_verdict TEXT,      -- 'MALICIOUS', 'BENIGN', 'FALSE_POSITIVE'
+                        analyst_notes TEXT
+                    )
+                """)
+                conn.commit()
+            return
+        except Exception:
+            pass
+
+    # JSON fallback initialization (for serverless/Wasm environments without sqlite3)
+    try:
+        if not os.path.exists(FEEDBACK_JSON_PATH):
+            with open(FEEDBACK_JSON_PATH, "w", encoding="utf-8") as f:
+                json.dump([], f)
+    except Exception:
+        pass
 
 
-# Initialize SQLite table on load
+# Initialize table or fallback storage on load
 init_feedback_db()
 
 
@@ -46,47 +73,90 @@ def log_analyst_feedback(
     analyst_verdict: str,
     analyst_notes: str = "",
 ) -> bool:
-    """Log an analyst confirm/override decision into the feedback database."""
+    """Log an analyst confirm/override decision into the feedback database (SQLite or JSON fallback)."""
     init_feedback_db()
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    record = {
+        "incident_id": incident_id,
+        "timestamp": ts,
+        "analyst_decision": analyst_decision.upper(),
+        "layer_fired": layer_fired,
+        "original_risk_level": original_risk_level.upper(),
+        "analyst_verdict": analyst_verdict.upper(),
+        "analyst_notes": analyst_notes,
+    }
+
+    # 1. Attempt SQLite first if module is available
+    if sqlite3 is not None:
+        try:
+            with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO analyst_feedback (
+                        incident_id, timestamp, analyst_decision, layer_fired,
+                        original_risk_level, analyst_verdict, analyst_notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        incident_id,
+                        ts,
+                        record["analyst_decision"],
+                        layer_fired,
+                        record["original_risk_level"],
+                        record["analyst_verdict"],
+                        analyst_notes,
+                    ),
+                )
+                conn.commit()
+            return True
+        except Exception:
+            pass
+
+    # 2. Fallback to persistent JSON storage
     try:
-        with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO analyst_feedback (
-                    incident_id, timestamp, analyst_decision, layer_fired,
-                    original_risk_level, analyst_verdict, analyst_notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    incident_id,
-                    ts,
-                    analyst_decision.upper(),
-                    layer_fired,
-                    original_risk_level.upper(),
-                    analyst_verdict.upper(),
-                    analyst_notes,
-                ),
-            )
-            conn.commit()
+        records = []
+        if os.path.exists(FEEDBACK_JSON_PATH):
+            with open(FEEDBACK_JSON_PATH, "r", encoding="utf-8") as f:
+                records = json.load(f)
+        record["id"] = len(records) + 1
+        records.insert(0, record)
+        with open(FEEDBACK_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(records, f, indent=2)
         return True
     except Exception:
-        return False
+        # 3. Fallback to in-memory list
+        record["id"] = len(_IN_MEMORY_FEEDBACK) + 1
+        _IN_MEMORY_FEEDBACK.insert(0, record)
+        return True
 
 
 def get_feedback_records() -> list[dict]:
-    """Retrieve all logged feedback records for live accuracy calculation."""
+    """Retrieve all logged feedback records for live accuracy calculation (SQLite or JSON fallback)."""
     init_feedback_db()
+    if sqlite3 is not None:
+        try:
+            with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM analyst_feedback ORDER BY id DESC")
+                rows = cursor.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+        except Exception:
+            pass
+
+    # JSON fallback
     try:
-        with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM analyst_feedback ORDER BY id DESC")
-            rows = cursor.fetchall()
-            return [dict(r) for r in rows]
+        if os.path.exists(FEEDBACK_JSON_PATH):
+            with open(FEEDBACK_JSON_PATH, "r", encoding="utf-8") as f:
+                records = json.load(f)
+                if records:
+                    return records
     except Exception:
-        return []
+        pass
+
+    return list(_IN_MEMORY_FEEDBACK)
 
 
 def get_live_accuracy_metrics() -> dict:

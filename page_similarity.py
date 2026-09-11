@@ -13,7 +13,32 @@ screenshot path or a PIL Image object directly as input.
 import os
 from typing import Union
 from PIL import Image
-import imagehash
+
+try:
+    import imagehash
+except ImportError:
+    imagehash = None
+
+
+class _FallbackHash:
+    """Fallback 64-bit difference hash when imagehash wheel is unavailable."""
+    def __init__(self, bits: list):
+        self.bits = bits
+    def __sub__(self, other):
+        if hasattr(other, 'bits'):
+            return sum(b1 != b2 for b1, b2 in zip(self.bits, other.bits))
+        return 64
+
+
+def _calc_dhash(img: Image.Image, hash_size: int = 8) -> _FallbackHash:
+    """Pure-Python difference hash (dHash) using standard Pillow resizing."""
+    resized = img.convert("L").resize((hash_size + 1, hash_size))
+    pixels = list(resized.getdata())
+    bits = []
+    for r in range(hash_size):
+        for c in range(hash_size):
+            bits.append(pixels[r * (hash_size + 1) + c] > pixels[r * (hash_size + 1) + c + 1])
+    return _FallbackHash(bits)
 
 
 # Directory containing reference brand templates
@@ -37,8 +62,12 @@ def load_reference_hashes(template_dir: str = TEMPLATES_DIR) -> dict:
                 with Image.open(fpath) as img:
                     # Convert to RGB to ensure uniform color space
                     img_rgb = img.convert("RGB")
-                    p_h = imagehash.phash(img_rgb)
-                    d_h = imagehash.dhash(img_rgb)
+                    if imagehash is not None:
+                        p_h = imagehash.phash(img_rgb)
+                        d_h = imagehash.dhash(img_rgb)
+                    else:
+                        d_h = _calc_dhash(img_rgb)
+                        p_h = d_h
                     ref_hashes[brand_name] = {
                         "phash": p_h,
                         "dhash": d_h,
@@ -121,8 +150,12 @@ def analyze_page_similarity(
         }
 
     # Compute perceptual and difference hashes for target
-    target_phash = imagehash.phash(target_img)
-    target_dhash = imagehash.dhash(target_img)
+    if imagehash is not None:
+        target_phash = imagehash.phash(target_img)
+        target_dhash = imagehash.dhash(target_img)
+    else:
+        target_dhash = _calc_dhash(target_img)
+        target_phash = target_dhash
 
     references = load_reference_hashes(template_dir)
     if not references:

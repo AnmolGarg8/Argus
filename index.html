@@ -293,7 +293,7 @@
 
         // ── Boot Sequence ─────────────────────────────────────────────────────
         stlite.mount({
-            requirements: ["pandas", "numpy", "plotly", "scikit-learn"],
+            requirements: ["pandas", "numpy", "plotly", "scikit-learn", "pillow", "requests"],
             entrypoint: "app.py",
             files: {
                 "app.py": { url: "./app.py" },
@@ -308,6 +308,9 @@
                 "page_similarity.py": { url: "./page_similarity.py" },
                 "sender_behavior.py": { url: "./sender_behavior.py" },
                 "attachment_qr_inspection.py": { url: "./attachment_qr_inspection.py" },
+                "templates/reference_logins/microsoft365.png": { url: "./templates/reference_logins/microsoft365.png" },
+                "templates/reference_logins/paypal.png": { url: "./templates/reference_logins/paypal.png" },
+                "templates/reference_logins/civic_portal.png": { url: "./templates/reference_logins/civic_portal.png" },
             },
         }, document.getElementById("root"));
 
