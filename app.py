@@ -25,6 +25,7 @@ from verdict_engine import (
     compute_live_feedback_metrics,
     get_all_feedback,
 )
+from threat_origin_map import render_threat_origin_map
 from simulator import generate_enterprise_stream, get_training_emails
 
 # ── Streamlit Page Configuration ─────────────────────────────────────────────
@@ -511,6 +512,23 @@ else:
     styled_table = styler.applymap(style_verdict, subset=["Verdict"])
 
 st.dataframe(styled_table, use_container_width=True, height=350)
+
+# ── Threat Origin Map: Geographic Distribution of Flagged Phishing Infrastructure ─
+st.markdown("""
+<div class="section-header" style="font-size:1.1rem; margin-top:2.5rem; margin-bottom:0.25rem;">
+    🌍 Threat Origin Map — Geographic Distribution of Flagged Phishing Infrastructure
+</div>
+<div style="font-size:0.75rem; color:#94A3B8; margin-bottom:1rem; text-transform:uppercase; letter-spacing:1px;">
+    Geographic hosting infrastructure and interception trajectories behind active phishing threats flagged across detection layers
+</div>
+""", unsafe_allow_html=True)
+
+map_events = filtered_df if not filtered_df[filtered_df["verdict"].isin(["BLOCK", "FLAG_FOR_REVIEW"])].empty else df_events
+render_threat_origin_map(
+    df_events=map_events,
+    custom_test_result=st.session_state.get("custom_test_result"),
+    height=540,
+)
 
 # ── Expandable Threat Intelligence Briefings & Analyst Feedback ───────────────
 st.markdown("""
