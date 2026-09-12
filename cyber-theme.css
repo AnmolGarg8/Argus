@@ -144,3 +144,88 @@ h1, h2, h3, .section-header {
     animation-duration: 6s;
     background: linear-gradient(to bottom, transparent, rgba(0, 212, 255, 0.03) 50%, transparent);
 }
+
+/* ── Critical Threat Blocked Modal ── */
+[data-testid="stDialog"] > div:first-child {
+    background: rgba(10, 2, 5, 0.97) !important;
+    border: 2px solid #FF2D55 !important;
+    box-shadow: 0 0 50px rgba(255, 45, 85, 0.55), inset 0 0 30px rgba(255, 45, 85, 0.08) !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(14px) !important;
+    padding: 24px !important;
+    max-width: 540px !important;
+}
+[data-testid="stDialog"] [data-testid="stDialogHeader"] {
+    display: none !important;
+}
+.threat-modal-card {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+}
+.threat-modal-icon {
+    font-size: 3.8rem;
+    margin-bottom: 8px;
+    display: block;
+    animation: alertPulse 1.8s infinite ease-in-out;
+}
+@keyframes alertPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(255, 45, 85, 0.7)); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 25px rgba(255, 45, 85, 0.95)); }
+}
+.threat-modal-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: #FF2D55;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+}
+.threat-modal-subtitle {
+    font-size: 0.68rem;
+    color: #94A3B8;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+}
+.threat-modal-score {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: #FF2D55;
+    margin: 8px 0;
+}
+.threat-modal-expl {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    color: #CBD5E1;
+    line-height: 1.45;
+    background: rgba(255, 45, 85, 0.08);
+    border: 1px solid rgba(255, 45, 85, 0.25);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-top: 12px;
+    text-align: left;
+}
+.close-alert-btn button {
+    background: #FF2D55 !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    padding: 12px 30px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    text-transform: uppercase !important;
+    font-weight: 800 !important;
+    letter-spacing: 1.5px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 0 20px rgba(255, 45, 85, 0.4) !important;
+    width: 100% !important;
+    margin-top: 15px !important;
+}
+.close-alert-btn button:hover {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.7) !important;
+    transform: translateY(-1px) !important;
+}
+

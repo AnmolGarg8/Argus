@@ -122,6 +122,60 @@ if "event_stream" not in st.session_state:
 if "custom_test_result" not in st.session_state:
     st.session_state.custom_test_result = None
 
+if "dismissed_threat_alerts" not in st.session_state:
+    st.session_state.dismissed_threat_alerts = set()
+
+if "active_critical_threat" not in st.session_state:
+    st.session_state.active_critical_threat = None
+
+# ── Critical Threat Modal Dialog Handler ──────────────────────────────────────
+dialog_decorator = getattr(st, "dialog", getattr(st, "experimental_dialog", None))
+
+def _render_critical_modal_contents(threat):
+    st.markdown(f"""
+    <div class="threat-modal-card">
+        <span class="threat-modal-icon">⚠️</span>
+        <div class="threat-modal-title">CRITICAL ALERT — PHISHING THREAT BLOCKED</div>
+        <div class="threat-modal-subtitle">AUTOMATED WEAPONIZATION INTERCEPT // ARGUS CORRELATED DEFENSE</div>
+        <div style="font-size:0.85rem; color:#FFFFFF; margin-bottom:6px; text-align:left; font-family:'Inter',sans-serif;">
+            <b>Sender:</b> <span style="color:#00D4FF; font-family:'JetBrains Mono',monospace;">{threat.get('sender', 'Unknown')}</span>
+        </div>
+        <div style="font-size:0.82rem; color:#E2E8F0; margin-bottom:8px; text-align:left; font-family:'Inter',sans-serif;">
+            <b>Subject:</b> <i>{threat.get('subject', 'No Subject')}</i>
+        </div>
+        <div class="threat-modal-score">
+            COMPOSITE RISK: {threat.get('score', 95.0):.1f}/100
+        </div>
+        <div style="font-size:0.75rem; color:#94A3B8; font-family:'JetBrains Mono',monospace; margin-bottom:8px; text-align:left;">
+            FIRING LAYERS: <span style="color:#FF2D55; font-weight:700;">{threat.get('layers', 'Multiple Detection Layers')}</span>
+        </div>
+        <div class="threat-modal-expl">
+            <b>Reason:</b> {threat.get('explanation', 'Phishing attack pattern confirmed across detection layers.')}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="close-alert-btn">', unsafe_allow_html=True)
+    if st.button("Acknowledge Threat", key="btn_dismiss_critical_threat", use_container_width=True):
+        tid = threat.get("id")
+        if tid:
+            st.session_state.dismissed_threat_alerts.add(tid)
+        st.session_state.active_critical_threat = None
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+if dialog_decorator:
+    @dialog_decorator("⚠️ CRITICAL ALERT — PHISHING THREAT BLOCKED")
+    def trigger_critical_threat_dialog(threat):
+        _render_critical_modal_contents(threat)
+else:
+    def trigger_critical_threat_dialog(threat):
+        with st.container():
+            _render_critical_modal_contents(threat)
+
+if st.session_state.get("active_critical_threat"):
+    trigger_critical_threat_dialog(st.session_state.active_critical_threat)
+
 df_events = st.session_state.event_stream
 
 # ── Platform Mission & Problem Statement Banner ──────────────────────────────
@@ -293,6 +347,19 @@ with st.container():
                 attachment_result=attach_out,
             )
             st.session_state.custom_test_result = verdict_out
+            if verdict_out.get("verdict") == "BLOCK":
+                test_subj_val = st.session_state.get("tc_subject", "Security Alert: Suspicious Transaction")
+                custom_tid = f"CONSOLE-{abs(hash((test_sender, test_subj_val, verdict_out.get('composite_score', 0))))}"
+                if custom_tid not in st.session_state.dismissed_threat_alerts:
+                    st.session_state.active_critical_threat = {
+                        "id": custom_tid,
+                        "sender": test_sender,
+                        "subject": test_subj_val,
+                        "score": float(verdict_out.get("composite_score", 95.0)),
+                        "layers": ", ".join(verdict_out.get("firing_layers", [])) if verdict_out.get("firing_layers") else "Multi-Engine Intercept",
+                        "explanation": verdict_out.get("explanation", ""),
+                    }
+                    st.rerun()
 
 # Display Live Test Result Card
 if st.session_state.custom_test_result:
@@ -451,6 +518,19 @@ with sim_c1:
         new_batch = generate_enterprise_stream(n=40, attack_ratio=0.05)
         new_scored = evaluate_message_pipeline(new_batch)
         st.session_state.event_stream = pd.concat([new_scored, st.session_state.event_stream], ignore_index=True)
+        blocks = new_scored[new_scored["verdict"] == "BLOCK"]
+        if not blocks.empty:
+            top_block = blocks.sort_values(by="risk_score", ascending=False).iloc[0]
+            tid = str(top_block.get("id", ""))
+            if tid not in st.session_state.dismissed_threat_alerts:
+                st.session_state.active_critical_threat = {
+                    "id": tid,
+                    "sender": top_block.get("sender_id", "Unknown"),
+                    "subject": top_block.get("subject", "No Subject"),
+                    "score": float(top_block.get("risk_score", 95.0)),
+                    "layers": str(top_block.get("firing_layers", "Multiple Detection Engines")),
+                    "explanation": str(top_block.get("explanation", "")),
+                }
         st.rerun()
 
 with sim_c2:
@@ -458,6 +538,19 @@ with sim_c2:
         new_attacks = generate_enterprise_stream(n=25, attack_ratio=0.90)
         new_scored = evaluate_message_pipeline(new_attacks)
         st.session_state.event_stream = pd.concat([new_scored, st.session_state.event_stream], ignore_index=True)
+        blocks = new_scored[new_scored["verdict"] == "BLOCK"]
+        if not blocks.empty:
+            top_block = blocks.sort_values(by="risk_score", ascending=False).iloc[0]
+            tid = str(top_block.get("id", ""))
+            if tid not in st.session_state.dismissed_threat_alerts:
+                st.session_state.active_critical_threat = {
+                    "id": tid,
+                    "sender": top_block.get("sender_id", "Unknown"),
+                    "subject": top_block.get("subject", "No Subject"),
+                    "score": float(top_block.get("risk_score", 95.0)),
+                    "layers": str(top_block.get("firing_layers", "Multiple Detection Engines")),
+                    "explanation": str(top_block.get("explanation", "")),
+                }
         st.rerun()
 
 with sim_c3:
